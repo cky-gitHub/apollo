@@ -1,0 +1,66 @@
+/* HUD overlay shell — layout only, no logic/state lives here.
+   Sits above the full-viewport Three.js canvas (sibling, position: absolute,
+   inset: 0). Must never block orbit-drag gestures on the canvas below. */
+
+.hud-root {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+
+  font-family: 'Courier New', ui-monospace, monospace;
+  color: #d7f4ff;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Shared readout "chip" look — subtle dark backdrop so text stays legible
+   over bright parts of the scene. */
+.hud-phase,
+.hud-countdown,
+.hud-telemetry {
+  position: absolute;
+  pointer-events: none;
+  padding: 0.5em 0.9em;
+  background: rgba(6, 12, 20, 0.45);
+  border: 1px solid rgba(215, 244, 255, 0.15);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+}
+
+/* Mission / phase name readout — top-left. */
+.hud-phase {
+  top: 1.25rem;
+  left: 1.25rem;
+}
+
+/* Countdown / mission-clock readout -- top-right. */
+.hud-countdown {
+  top: 1.25rem;
+  right: 1.25rem;
+  min-width: 6em;
+  text-align: center;
+}
+
+/* Numeric telemetry readout — bottom-left. */
+.hud-telemetry {
+  bottom: 1.25rem;
+  left: 1.25rem;
+}
+
+.hud-label {
+  opacity: 0.6;
+  font-size: 0.75em;
+}
+
+.hud-value {
+  font-size: 1.05em;
+  letter-spacing: 0.04em;
+}
