@@ -1,0 +1,27 @@
+/* Design tokens — 1960s NASA mission-control / CRT phosphor aesthetic.
+   Intentionally fixed, not prefers-color-scheme aware: this is a themed
+   instrument panel, not an adaptive light/dark UI. */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap');
+
+:root {
+  /* surfaces */
+  --mc-bg: #0a0e12;
+  --mc-panel-bg: rgba(10, 14, 18, 0.55);
+
+  /* phosphor accents */
+  --mc-amber: #ffb000;
+  --mc-amber-dim: #ffb00044;
+  --mc-green: #33ff99;
+  --mc-alert: #ff4136;
+
+  /* text */
+  --mc-text: #e8e8e0;
+  --mc-text-dim: #e8e8e099;
+
+  /* type */
+  --mc-font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, 'Courier New', monospace;
+  --mc-font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  /* CRT phosphor glow, for accent-colored text only */
+  --mc-glow-sm: 0 0 4px currentColor;
+}

@@ -1,9 +1,10 @@
 // TEMP: test rig — remove before ship.
 // Keyboard override + debug readout for exercising flow.phase transitions
-// before the countdown/liftoff/staging sequences exist to drive them for
-// real. Arrow keys jump phases directly and bypass the autoplayComplete
-// gate that scrollStepper.js respects, so any phase can be reached
-// immediately. Delete this file plus its two wiring lines in
+// before the full staging sequence exists to drive them for real. Arrow
+// keys jump phases directly and bypass the autoplayComplete gate that
+// scrollStepper.js respects, so any phase can be reached immediately. 'L'
+// (re)triggers the real countdown/liftoff LaunchSequence from T-10, once
+// wired via setLaunchSequence(). Delete this file plus its wiring in
 // SceneManager.js once the real sequences land.
 import { PHASES } from '../data/phases.js'
 
@@ -13,12 +14,20 @@ const MAX_PHASE = 9
 export class PhaseTestRig {
   constructor({ flowStore }) {
     this.flowStore = flowStore
+    this.launchSequence = null
     this._debugEl = null
 
     this._onKeyDown = this._onKeyDown.bind(this)
     window.addEventListener('keydown', this._onKeyDown)
 
     this._unsubscribe = flowStore.subscribe(() => this._updateDebugReadout())
+  }
+
+  // The launch sequence is only constructed once the rocket has loaded
+  // (SceneManager.init(), which resolves after this rig already exists), so
+  // it's wired in after the fact rather than passed to the constructor.
+  setLaunchSequence(launchSequence) {
+    this.launchSequence = launchSequence
   }
 
   _onKeyDown(event) {
@@ -28,6 +37,8 @@ export class PhaseTestRig {
       this._step(-1)
     } else if (event.key.toLowerCase() === 'i') {
       this._toggleDebug()
+    } else if (event.key.toLowerCase() === 'l') {
+      this.launchSequence?.start()
     }
   }
 
@@ -70,7 +81,8 @@ export class PhaseTestRig {
       `DEBUG (temp)\n` +
       `mode: ${mode}\n` +
       `phase: ${flow.phase} — ${phaseInfo.name}\n` +
-      `autoplayComplete: ${flow.autoplayComplete}`
+      `autoplayComplete: ${flow.autoplayComplete}\n` +
+      `launch: ${this.launchSequence?.stage ?? 'n/a'} (press L)`
   }
 
   dispose() {

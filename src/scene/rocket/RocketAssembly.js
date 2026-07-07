@@ -89,6 +89,24 @@ function tuneTopMaterial(material) {
   material.userData.saturnVTuned = true
 }
 
+// The top GLB stores the launch-escape tower + boost protective cover as
+// dozens of sibling nodes prefixed "LES-". Gather them into one named group
+// so the staging choreography can jettison the whole tower as a unit.
+function groupLesAssembly(topRoot) {
+  const lesNodes = []
+  topRoot.traverse((object) => {
+    if (object.name.startsWith('LES-') && !object.parent?.name?.startsWith('LES-')) {
+      lesNodes.push(object)
+    }
+  })
+  if (lesNodes.length === 0) return
+
+  const les = new THREE.Group()
+  les.name = 'LES'
+  topRoot.add(les)
+  lesNodes.forEach((node) => les.attach(node))
+}
+
 function tuneTopMaterials(root) {
   root.traverse((object) => {
     if (!object.isMesh) return
@@ -144,6 +162,7 @@ function addTopAssembly({ rocket, stageGroups, topGltf }) {
   const topRoot = topGltf.scene
   topRoot.name = 'CSM-LES'
   pruneTopReferenceObjects(topRoot)
+  groupLesAssembly(topRoot)
   tuneTopMaterials(topRoot)
   topRoot.scale.setScalar(FEET_TO_METERS)
   topRoot.updateWorldMatrix(true, true)

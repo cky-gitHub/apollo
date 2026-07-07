@@ -59,6 +59,30 @@ export class FlowStore {
     this._emit()
   }
 
+  // Marks autoplay done outside the countdown ticker — used when the staging
+  // choreography takes over from an interrupted countdown/liftoff (test-rig
+  // phase jump), so the scroll stepper doesn't stay locked forever.
+  completeAutoplay() {
+    if (this.state.flow.autoplayComplete) return
+    this.state = {
+      ...this.state,
+      flow: { ...this.state.flow, autoplayComplete: true },
+    }
+    this._emit()
+  }
+
+  // Restarts the phase-0 countdown from T-10 — used by an on-demand launch
+  // sequence to (re)trigger a real countdown rather than relying on the
+  // default autoplayComplete: true scaffolding.
+  resetCountdown() {
+    this.countdownSeconds = COUNTDOWN_START_SECONDS
+    this.state = {
+      ...this.state,
+      flow: { ...this.state.flow, phase: 0, autoplayComplete: false },
+    }
+    this._emit()
+  }
+
   _buildSnapshot() {
     return { ...this.state, countdownSeconds: this.countdownSeconds }
   }

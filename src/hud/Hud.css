@@ -1,5 +1,5 @@
 /* HUD overlay shell — layout only, no logic/state lives here.
-   Sits above the full-viewport Three.js canvas (sibling, position: absolute,
+   Sits above the full-viewport Three.js canvas (sibling, position: fixed,
    inset: 0). Must never block orbit-drag gestures on the canvas below. */
 
 .hud-root {
@@ -8,59 +8,100 @@
   z-index: 10;
   pointer-events: none;
 
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-
-  font-family: 'Courier New', ui-monospace, monospace;
-  color: #d7f4ff;
+  font-family: var(--mc-font-mono);
+  color: var(--mc-text);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
-/* Shared readout "chip" look — subtle dark backdrop so text stays legible
-   over bright parts of the scene. */
-.hud-phase,
-.hud-countdown,
-.hud-telemetry {
+/* Faint CRT scanline texture over the whole viewport (canvas included).
+   Kept very low-opacity so it reads as texture, not noise. */
+.hud-scanlines {
   position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.35) 0,
+    rgba(0, 0, 0, 0.35) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+}
+
+/* Shared instrument-panel readout: thin amber border over a near-black
+   scrim, small uppercase label above a monospace value. Deliberately
+   square, not a rounded modern card. */
+.hud-module {
   pointer-events: none;
   padding: 0.5em 0.9em;
-  background: rgba(6, 12, 20, 0.45);
-  border: 1px solid rgba(215, 244, 255, 0.15);
-  border-radius: 4px;
+  background: var(--mc-panel-bg);
+  border: 1px solid var(--mc-amber-dim);
   font-size: 0.85rem;
   display: flex;
   flex-direction: column;
-  gap: 0.2em;
+  gap: 0.25em;
 }
 
-/* Mission / phase name readout — top-left. */
-.hud-phase {
+.hud-status {
+  position: absolute;
   top: 1.25rem;
   left: 1.25rem;
+  min-width: 12em;
 }
 
-/* Countdown / mission-clock readout -- top-right. */
-.hud-countdown {
+.hud-clock {
+  position: absolute;
   top: 1.25rem;
-  right: 1.25rem;
-  min-width: 6em;
+  left: 50%;
+  transform: translateX(-50%);
   text-align: center;
+  min-width: 10em;
 }
 
-/* Numeric telemetry readout — bottom-left. */
-.hud-telemetry {
+.hud-cluster.hud-telemetry {
+  position: absolute;
   bottom: 1.25rem;
   left: 1.25rem;
+  display: flex;
+  flex-direction: row;
+  gap: 0.75rem;
 }
 
 .hud-label {
-  opacity: 0.6;
-  font-size: 0.75em;
+  color: var(--mc-text-dim);
+  font-size: 0.72em;
+  letter-spacing: 0.12em;
 }
 
 .hud-value {
+  color: var(--mc-amber);
   font-size: 1.05em;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
+  text-shadow: var(--mc-glow-sm);
+}
+
+.hud-value--lg {
+  font-size: 1.3em;
+}
+
+.hud-substat {
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  font-size: 0.72em;
+  color: var(--mc-green);
+  letter-spacing: 0.1em;
+  text-shadow: var(--mc-glow-sm);
+}
+
+.hud-go-dot {
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  background: var(--mc-green);
+  box-shadow: 0 0 4px var(--mc-green);
+  flex: none;
 }

@@ -62,5 +62,25 @@ Each scroll gesture advances phase by exactly 1 (debounced), not proportional to
 
 \## Camera
 
-Camera moves are defined as phase -> {position, target} pairs, lerped/slerped between phases on transition. Never hardcode camera moves inline in animation loops — always go through this mapping.
+Camera moves are defined as phase -> pose entries in cameraPath.js, lerped between phases on transition. Never hardcode camera moves inline in animation loops — always go through this mapping.
+
+Pose fields: `{ position, target }` plus optional `frame: 'rocket'` (offsets resolved against the rocket group's local `(0, focusHeight, 0)` carried to world every frame — chase framing that tracks powered flight), `duration` (ms for the transition INTO the pose), `shake` (amplitude in meters, multiplied by the choreography-set shake gain), `orbitSpeed` (rad/s slow orbit around the focus point while a phase holds). Phases 0-2 are world-frame (pad-anchored); 3+ are rocket-frame. SceneManager resolves poses via `resolvePoseWorld()` and smooths the camera toward them (slight chase lag is intentional — vehicle accelerations read in-frame).
+
+\## Staging choreography (sequences/StagingChoreography.js)
+
+Owns the rocket transform for phases >= 3 and whenever a beat/glide runs. Rules:
+
+\- A forward step from the ADJACENT phase plays that phase's timed beat (engine cutoff -> retro flash -> stage tumbles away as scene-attached debris -> next stage ignites).
+
+\- Any other arrival (backward scroll, test-rig jump, inspect exit) glides \~0.9s to that phase's settled state; discrete facts (attached stages, burning engine) apply instantly. Every phase must stay reachable from any other.
+
+\- LaunchSequence owns phases 0-2 while its countdown/liftoff run is active; entering phase >= 3 (or inspect) interrupts it via `interrupt()`.
+
+\- Inspect mode rebuilds the full stack at the pad (home transforms stored per jettisonable, INCLUDING scale — scene.attach bakes the GLB feet->meters scale in) and the camera jumps to a canonical inspect pose; exiting re-syncs to the flow phase.
+
+\- The LES tower is grouped at load into an 'LES' group inside the top assembly (RocketAssembly) and jettisons during the phase-5 beat.
+
+\## Exhaust (particles/ExhaustSystem.js)
+
+Per-stage systems built from EXHAUST\_PRESETS: F1\_CLUSTER (sea level, orange, pad-anchored smoke), J2\_CLUSTER / J2\_SINGLE (vacuum: wide, translucent, blue, no smoke). Plumes are additive gradient cones + glow sprites; `setStretch(k)` lengthens them with speed. Transparent-pass gotcha: the launch pad meshes carry `renderOrder = -1` so the fading pad never paints over the plumes — mind render order when adding new transparent objects near the pad.
 
