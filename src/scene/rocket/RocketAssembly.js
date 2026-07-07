@@ -4,9 +4,15 @@ import { STAGE_SPECS } from '../../data/stageSpecs.js'
 
 const SATURN_V_MODEL_URL = '/models/Saturn%20V.glb'
 const SATURN_V_TOP_MODEL_URL = '/models/very%20top.glb'
+const LM_MODEL_URL = '/models/lunar%20module.glb'
 const FEET_TO_METERS = 0.3048
 const TOP_ADAPTER_HEIGHT = 4.9
 const TOP_BODY_BOTTOM_NAME = 'SM Body, Bottom'
+// The LM GLB is authored legs-down (+Y up, base near y=0) at ~5m tall/6.4m
+// wide — scaled down slightly so the stowed module tucks inside the SLA
+// adapter cone below the CSM.
+const LM_SCALE = 0.9
+const LM_STOWED_CLEARANCE = 0.3 // above the adapter's bottom lip
 
 // The imported GLB is authored as a few major Saturn V assemblies rather than
 // already-separated mission stages. Interstages/adapters travel with the lower
@@ -156,6 +162,24 @@ function centerStageGroup(group) {
   group.userData.modelBounds = { min: box.min.toArray(), max: box.max.toArray() }
 }
 
+// Bounding box of `root` skipping the subtree named `excludeName` — used to
+// measure the CSM body proper while the (later-jettisoned) LES tower and its
+// boost cover are still attached.
+function boxExcluding(root, excludeName) {
+  const box = new THREE.Box3()
+  root.updateWorldMatrix(true, true)
+  root.traverse((object) => {
+    if (!object.isMesh) return
+    let current = object
+    while (current && current !== root) {
+      if (current.name === excludeName) return
+      current = current.parent
+    }
+    box.expandByObject(object)
+  })
+  return box
+}
+
 function addTopAssembly({ rocket, stageGroups, topGltf }) {
   if (!topGltf) return
 
@@ -188,12 +212,63 @@ function addTopAssembly({ rocket, stageGroups, topGltf }) {
   topStage.add(adapter)
   topStage.add(topRoot)
 
+  // Pivot group for the transposition maneuver: 'CSM-Body' wraps the CSM
+  // (and its LES, until jettison) with its ORIGIN at the body's center, so
+  // the 180° transposition flip is a plain rotation of this group. The SLA
+  // adapter stays outside it — it jettisons separately.
+  topStage.updateWorldMatrix(true, true)
+  const bodyBox = boxExcluding(topRoot, 'LES')
+  const csmBody = new THREE.Group()
+  csmBody.name = 'CSM-Body'
+  csmBody.position.y = (bodyBox.min.y + bodyBox.max.y) / 2
+  topStage.add(csmBody)
+  csmBody.attach(topRoot)
+  // Rotation-invariant offsets from the pivot, for the docking math and the
+  // SPS exhaust anchor (the bell is the body's lowest point).
+  csmBody.userData.apexOffset = bodyBox.max.y - csmBody.position.y
+  csmBody.userData.engineOffsetY = bodyBox.min.y - csmBody.position.y + 0.4
+
   centerStageGroup(topStage)
   rocket.add(topStage)
   stageGroups.set('CSM', topStage)
 }
 
-function buildModelRocketStack(gltf, topGltf) {
+// Adds the Lunar Module stowed inside the SLA adapter, invisible until the
+// transposition-and-docking beat reveals it. Registered as a stage group
+// (before CSM, matching stack order) so inspection explode/isolate includes
+// it.
+function addLunarModule({ rocket, stageGroups, lmGltf }) {
+  if (!lmGltf) return
+
+  const adapter = rocket.getObjectByName('CSM-SLA-Adapter')
+  if (!adapter) return
+
+  const lmRoot = lmGltf.scene
+  lmRoot.name = 'LM-Model'
+  lmRoot.scale.setScalar(LM_SCALE)
+  lmRoot.updateWorldMatrix(true, true)
+
+  const lmGroup = createStageGroup(STAGE_SPECS.LM)
+  lmGroup.add(lmRoot)
+
+  rocket.updateWorldMatrix(true, true)
+  const adapterBottomY = new THREE.Box3().setFromObject(adapter).min.y
+  const lmBox = new THREE.Box3().setFromObject(lmRoot)
+  lmRoot.position.y = adapterBottomY + LM_STOWED_CLEARANCE - lmBox.min.y
+
+  rocket.add(lmGroup)
+  centerStageGroup(lmGroup)
+  lmGroup.visible = false
+
+  // Keep stack order (LM below CSM) in the stage map — inspection's explode
+  // spacing follows insertion order.
+  const csmGroup = stageGroups.get('CSM')
+  if (csmGroup) stageGroups.delete('CSM')
+  stageGroups.set('LM', lmGroup)
+  if (csmGroup) stageGroups.set('CSM', csmGroup)
+}
+
+function buildModelRocketStack(gltf, topGltf, lmGltf) {
   gltf.scene.updateWorldMatrix(true, true)
 
   const rocket = new THREE.Group()
@@ -234,6 +309,7 @@ function buildModelRocketStack(gltf, topGltf) {
   }
 
   addTopAssembly({ rocket, stageGroups, topGltf })
+  addLunarModule({ rocket, stageGroups, lmGltf })
 
   return { rocket, stageGroups }
 }
@@ -254,5 +330,12 @@ export async function buildRocketStack() {
     console.warn('Saturn V top model was not loaded; using lower stack only.', error)
   }
 
-  return buildModelRocketStack(gltf, topGltf)
+  let lmGltf = null
+  try {
+    lmGltf = await loadGltf(LM_MODEL_URL)
+  } catch (error) {
+    console.warn('Lunar Module model was not loaded; lunar phases will lack the LM.', error)
+  }
+
+  return buildModelRocketStack(gltf, topGltf, lmGltf)
 }

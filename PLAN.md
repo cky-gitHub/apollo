@@ -26,7 +26,7 @@ apollo/
 │   │   ├── flowState.js        ✅ state machine container
 │   │   ├── inspection.js       ✅ explode/isolate/orbit/labels
 │   │   ├── cameraPaths.js      ◐ phase→{position,target}, stubbed values
-│   │   ├── scrollStepper.js    ▢ debounced scroll → phase advance
+│   │   ├── spaceStepper.js     ▢ debounced space-bar → phase advance
 │   │   ├── rocket/
 │   │   │   ├── RocketAssembly.js  ✅ stack (needs accuracy pass)
 │   │   │   ├── stageBuilders.js   ◐ per-stage geometry (needs Saturn V detail)

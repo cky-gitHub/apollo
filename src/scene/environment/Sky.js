@@ -49,7 +49,10 @@ function buildStarField() {
   const radius = DOME_RADIUS * 0.95
   for (let i = 0; i < STAR_COUNT; i += 1) {
     const theta = Math.random() * Math.PI * 2
-    const phi = Math.acos(Math.random()) // upper hemisphere-weighted
+    // Full sphere: the lunar phases look down/sideways as much as up, so
+    // stars can't be hemisphere-only anymore. On the pad they're invisible
+    // (opacity tracks altitudeFactor), so nothing leaks below the horizon.
+    const phi = Math.acos(2 * Math.random() - 1)
     positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta)
     positions[i * 3 + 1] = radius * Math.cos(phi)
     positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta)

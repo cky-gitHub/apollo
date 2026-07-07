@@ -4,6 +4,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 const EXPLODE_GAP = 15 // meters of extra spacing per stage boundary once exploded
 const STAGE_TRANSITION_DURATION = 800 // ms
 const CLICK_DRAG_THRESHOLD = 5 // px of pointer movement still counted as a click
+const FRAMING_PADDING = 30 // m, so a single remaining stage still gets a non-zero span to frame
+const MIN_FRAMING_SCALE = 0.2 // floor so framing never zooms in absurdly close
 
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
@@ -20,6 +22,7 @@ export class InspectionController {
     this.rocket = rocket
     this.stageGroups = stageGroups
     this.flowStore = flowStore
+    this._choreography = null // wired post-construction via setChoreography(); see SceneManager.init()
 
     this.raycaster = new THREE.Raycaster()
     this.pointer = new THREE.Vector2()
@@ -72,6 +75,59 @@ export class InspectionController {
     this._unsubscribe = flowStore.subscribe(() => this._onStoreChange(flowStore.getSnapshot()))
   }
 
+  // The choreography doesn't exist yet when this controller is constructed
+  // (SceneManager.init() builds it after) — wired in once it does, so
+  // inspection can ask which stages are actually still attached.
+  setChoreography(choreography) {
+    this._choreography = choreography
+  }
+
+  _isPresent(stageId) {
+    return this._choreography?.isStagePresent(stageId) ?? true
+  }
+
+  // Currently-attached stage ids, in stack order. Falls back to all of them
+  // if somehow none are present, so framing math never divides by nothing.
+  _presentStageIds() {
+    const all = [...this.stageGroups.keys()]
+    const present = all.filter((id) => this._isPresent(id))
+    return present.length > 0 ? present : all
+  }
+
+  _explodedY(stageId) {
+    const index = [...this.stageGroups.keys()].indexOf(stageId)
+    return this._stackY.get(stageId) + index * EXPLODE_GAP
+  }
+
+  // World-space midpoint of the currently-attached stack's EXPLODED layout
+  // (not a fixed pad spot, and not the collapsed stack Y either — the
+  // camera/orbit-target framing is tuned for the exploded overview, which
+  // is where a fresh click-to-inspect always lands). The rocket may be
+  // mid-flight and tilted, so this rides its current transform the same way
+  // cameraPath.js's rocket-frame poses do.
+  getFocusWorldPosition(target = new THREE.Vector3()) {
+    const ys = this._presentStageIds().map((id) => this._explodedY(id))
+    const midY = (Math.min(...ys) + Math.max(...ys)) / 2
+    return target
+      .set(0, midY, 0)
+      .applyQuaternion(this.rocket.quaternion)
+      .add(this.rocket.position)
+  }
+
+  // How much of the fully-exploded stack's vertical span the currently-
+  // present stages cover, as a 0-1 scale — so the inspect camera zooms in
+  // when little of the vehicle remains (e.g. just the LM, late in the
+  // mission) instead of framing empty space sized for the whole stack.
+  getFramingScale() {
+    const allIds = [...this.stageGroups.keys()]
+    const presentYs = this._presentStageIds().map((id) => this._explodedY(id))
+    const allYs = allIds.map((id) => this._explodedY(id))
+    const presentSpan = Math.max(...presentYs) - Math.min(...presentYs)
+    const fullSpan = Math.max(...allYs) - Math.min(...allYs)
+    const scale = (presentSpan + FRAMING_PADDING) / (fullSpan + FRAMING_PADDING)
+    return THREE.MathUtils.clamp(scale, MIN_FRAMING_SCALE, 1)
+  }
+
   _onStoreChange(state) {
     if (state.mode !== this._mode) {
       this._mode = state.mode
@@ -97,7 +153,8 @@ export class InspectionController {
     const isolatedId = typeof stage === 'object' ? stage.isolated : null
 
     this.stageGroups.forEach((group, stageId) => {
-      group.visible = !isolatedId || stageId === isolatedId
+      const wantVisible = !isolatedId || stageId === isolatedId
+      group.visible = wantVisible && this._isPresent(stageId)
     })
 
     if (stage === 'stack') {
@@ -112,19 +169,20 @@ export class InspectionController {
   _updateOrbitTarget(isolatedId) {
     if (isolatedId) {
       const group = this.stageGroups.get(isolatedId)
-      if (group) this.controls.target.set(0, group.position.y, 0)
+      if (group) {
+        this.controls.target
+          .set(0, group.position.y, 0)
+          .applyQuaternion(this.rocket.quaternion)
+          .add(this.rocket.position)
+      }
       return
     }
-    const ys = [...this._stackY.values()]
-    const midY = (Math.min(...ys) + Math.max(...ys)) / 2
-    this.controls.target.set(0, midY, 0)
+    this.getFocusWorldPosition(this.controls.target)
   }
 
   _explode() {
-    ;[...this.stageGroups.keys()].forEach((stageId, index) => {
-      const group = this.stageGroups.get(stageId)
-      const toY = this._stackY.get(stageId) + index * EXPLODE_GAP
-      this._startTransition(stageId, group.position.y, toY)
+    this.stageGroups.forEach((group, stageId) => {
+      this._startTransition(stageId, group.position.y, this._explodedY(stageId))
     })
   }
 

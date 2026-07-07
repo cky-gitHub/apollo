@@ -10,7 +10,7 @@ export const PHASES = [
   { id: 4, name: 'S-IC Separation', altitude: 65, velocity: 2300 },
   { id: 5, name: 'S-II Ascent', altitude: 110, velocity: 6900 },
   { id: 6, name: 'S-IVB Burn / TLI', altitude: 185, velocity: 10400 },
-  { id: 7, name: 'Transposition & Docking', altitude: 190, velocity: 10800 },
-  { id: 8, name: 'LM Descent', altitude: 15, velocity: 1700 },
+  { id: 7, name: 'Transposition & Docking', altitude: 60000, velocity: 7500 },
+  { id: 8, name: 'Lunar Approach', altitude: 340000, velocity: 1600 },
   { id: 9, name: 'Lunar Surface', altitude: 0, velocity: 0 },
 ]

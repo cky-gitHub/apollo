@@ -7,14 +7,48 @@ import { buildRadialTexture } from './ExhaustSystem.js'
 const FLASH_LIFE = 0.55 // seconds
 const SPARK_LIFE = 1.1
 const SPARKS_PER_BURST = 12
+const DUST_LIFE = 2.6
+const DUST_PER_BURST = 26
 
 export class SeparationFlash {
   constructor(scene) {
     this.scene = scene
     this._flashTexture = buildRadialTexture('rgba(255,246,224,1)', 'rgba(255,150,40,0)')
     this._sparkTexture = buildRadialTexture('rgba(255,235,200,1)', 'rgba(255,120,30,0)', 32)
+    this._dustTexture = buildRadialTexture('rgba(196,192,184,0.55)', 'rgba(196,192,184,0)')
     this._flashes = []
     this._sparks = []
+    this._dust = []
+  }
+
+  // Touchdown dust: normal-blended gray sprites blasting radially outward,
+  // low and flat — no gravity arc, no glow. In vacuum, kicked regolith flies
+  // ballistically and settles fast rather than billowing.
+  spawnDust(worldPosition, { speed = 9 } = {}) {
+    for (let i = 0; i < DUST_PER_BURST; i += 1) {
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: this._dustTexture,
+          transparent: true,
+          depthWrite: false,
+          opacity: 0,
+        }),
+      )
+      sprite.position.copy(worldPosition)
+      const angle = Math.random() * Math.PI * 2
+      const radial = speed * (0.4 + Math.random() * 0.9)
+      this._dust.push({
+        sprite,
+        velocity: new THREE.Vector3(
+          Math.cos(angle) * radial,
+          0.4 + Math.random() * 1.2,
+          Math.sin(angle) * radial,
+        ),
+        age: 0,
+        maxLife: DUST_LIFE * (0.6 + Math.random() * 0.4),
+      })
+      this.scene.add(sprite)
+    }
   }
 
   spawn(worldPosition, { scale = 26, sparkSpeed = 22 } = {}) {
@@ -84,13 +118,29 @@ export class SeparationFlash {
       spark.sprite.position.addScaledVector(spark.velocity, dt)
       spark.sprite.material.opacity = 1 - t
     }
+
+    for (let i = this._dust.length - 1; i >= 0; i -= 1) {
+      const dust = this._dust[i]
+      dust.age += dt
+      const t = dust.age / dust.maxLife
+      if (t >= 1) {
+        this.scene.remove(dust.sprite)
+        this._dust.splice(i, 1)
+        continue
+      }
+      dust.sprite.position.addScaledVector(dust.velocity, dt)
+      dust.sprite.scale.setScalar(2 + t * 9)
+      dust.sprite.material.opacity = 0.5 * (1 - t) * Math.min(t * 8, 1)
+    }
   }
 
   clear() {
     this._flashes.forEach((f) => this.scene.remove(f.sprite))
     this._sparks.forEach((s) => this.scene.remove(s.sprite))
+    this._dust.forEach((d) => this.scene.remove(d.sprite))
     this._flashes = []
     this._sparks = []
+    this._dust = []
   }
 
   dispose() {

@@ -84,6 +84,54 @@ export const EXHAUST_PRESETS = {
     spriteScale: [2.6, 5],
     smoke: false,
   },
+  // CSM Service Propulsion System: single hypergolic engine, pale
+  // orange-pink translucent vacuum plume. Burns during lunar-orbit braking.
+  SPS_SINGLE: {
+    engineCount: 1,
+    layoutRadius: 0,
+    nozzleRadius: 0.95,
+    plumeLength: 11,
+    flare: 3.6,
+    coreStops: [
+      [0, 'rgba(255,240,228,0.85)'],
+      [0.3, 'rgba(255,196,160,0.5)'],
+      [0.7, 'rgba(255,140,110,0.18)'],
+      [1, 'rgba(220,90,80,0)'],
+    ],
+    glowStops: [
+      [0, 'rgba(255,214,190,0.3)'],
+      [0.5, 'rgba(255,150,120,0.1)'],
+      [1, 'rgba(220,90,80,0)'],
+    ],
+    spriteInner: 'rgba(255,244,232,1)',
+    spriteOuter: 'rgba(255,150,110,0)',
+    spriteScale: [2.2, 4.2],
+    smoke: false,
+  },
+  // LM Descent Propulsion System: smaller hypergolic bell for the powered
+  // descent — modest plume that still reads against the lunar surface.
+  DPS_SINGLE: {
+    engineCount: 1,
+    layoutRadius: 0,
+    nozzleRadius: 0.7,
+    plumeLength: 7,
+    flare: 3.0,
+    coreStops: [
+      [0, 'rgba(255,242,230,0.9)'],
+      [0.3, 'rgba(255,200,164,0.55)'],
+      [0.7, 'rgba(255,150,116,0.2)'],
+      [1, 'rgba(220,100,84,0)'],
+    ],
+    glowStops: [
+      [0, 'rgba(255,218,194,0.32)'],
+      [0.5, 'rgba(255,156,124,0.12)'],
+      [1, 'rgba(220,100,84,0)'],
+    ],
+    spriteInner: 'rgba(255,246,236,1)',
+    spriteOuter: 'rgba(255,156,116,0)',
+    spriteScale: [1.7, 3.2],
+    smoke: false,
+  },
   // Single vacuum J-2 (S-IVB).
   J2_SINGLE: {
     engineCount: 1,

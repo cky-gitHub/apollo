@@ -2,7 +2,7 @@
 // Keyboard override + debug readout for exercising flow.phase transitions
 // before the full staging sequence exists to drive them for real. Arrow
 // keys jump phases directly and bypass the autoplayComplete gate that
-// scrollStepper.js respects, so any phase can be reached immediately. 'L'
+// spaceStepper.js respects, so any phase can be reached immediately. 'L'
 // (re)triggers the real countdown/liftoff LaunchSequence from T-10, once
 // wired via setLaunchSequence(). Delete this file plus its wiring in
 // SceneManager.js once the real sequences land.

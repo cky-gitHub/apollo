@@ -2,23 +2,30 @@ import * as THREE from 'three'
 import { ExhaustSystem, EXHAUST_PRESETS } from '../particles/ExhaustSystem.js'
 import { SeparationFlash } from '../particles/SeparationFlash.js'
 
-// Powered ascent + staging choreography for phases 3-6 (Max-Q through the
-// S-IVB/TLI burn), with settled placeholder states for 7-9 until the lunar
-// assets exist.
+// Powered ascent, staging, and the trans-lunar arc: phases 3-9, from Max-Q
+// through S-IC/S-II staging, TLI, transposition-and-docking, lunar approach,
+// and the LM's powered descent to the surface.
 //
 // Driven entirely by flow.phase, per the state machine:
 //  - A forward step from the adjacent phase plays that phase's BEAT — a
 //    timed cinematic (engine cutoff, retro flash, stage tumbling away, next
 //    stage lighting) that ends in the phase's settled flight state.
-//  - Any other arrival (backward scroll, test-rig jump, inspect-mode exit)
+//  - Any other arrival (test-rig jump, inspect-mode exit)
 //    GLIDES to the settled state directly: continuous quantities tween over
 //    ~a second, discrete ones (which stages are attached, which engine
-//    burns) apply immediately. Every phase is therefore reachable from any
-//    other without broken intermediate states.
+//    burns, whether the CSM is stowed/docked/gone) apply immediately. Every
+//    phase is therefore reachable from any other without broken states.
 //
 // The rocket group is moved/tilted here; the camera never is — camera
 // framing lives in cameraPath.js as rocket-relative poses that track the
 // vehicle, so this file and the camera system stay decoupled.
+//
+// From phase 7 on, the "journey" is staged around the vehicle rather than
+// flown by it: the rocket group only drifts, while Earth/Moon positions,
+// scales and the sun direction are lerped through the same continuous
+// channel as the rocket transform (see the env blocks in SETTLED). Phase 9
+// descends onto the Moon sphere itself — its top surface is the landing
+// terrain, so approach and touchdown share one physical backdrop.
 //
 // Ownership handshake with LaunchSequence (phases 0-2): while its
 // countdown/ignition/liftoff run is in progress it owns the rocket, and this
@@ -49,28 +56,66 @@ function coastThenBurn(knotT, knotP) {
   }
 }
 
+// Environment staging per phase: Earth/Moon [x, y, z, scale, opacity] and
+// the key light's position (sun direction). Pre-TLI phases keep the bodies
+// at their phase-7 entry marks with opacity 0, so the reveal is a fade,
+// never a sweep across the frame. LIGHT_SPACE swings the sun toward +Z for
+// the space phases so both discs show a terminator instead of facing the
+// camera dark.
+const LIGHT_HOME = [180, 220, 120]
+const LIGHT_SPACE = [500, 1400, 3200]
+const ENV_HOME = {
+  earth: [-2700, 800, -1500, 1, 0],
+  moon: [5200, 2100, -900, 0.28, 0],
+  light: LIGHT_HOME,
+}
+
 // Settled flight state per phase. pos is the rocket group origin (base of
 // the stack) in world units; tilt is the gravity-turn lean (rotation.z =
 // -tilt, nose toward +X). Absolute numbers are cinematic, not physical —
 // the camera rides with the rocket, so only relative motion and the
 // receding pad/debris read on screen.
+//
+// csm: 'stowed' (riding the stack) | 'docked' (transposed, nose on the LM)
+//      | 'gone' (departed as debris before the descent)
+// lm:  whether the Lunar Module is revealed (it hides inside the SLA
+//      adapter until transposition).
+// env.moon in phase 9 is sized/placed so the sphere's top surface sits
+// exactly under the LM's footpads at the settled pos — the landing site.
 const SETTLED = [
-  { pos: [0, 0, 0], tilt: 0, burn: null, sky: 0, pad: 1, stretch: 1, detached: [] },
-  { pos: [0, 0, 0], tilt: 0, burn: 'S-IC', sky: 0, pad: 1, stretch: 1, detached: [] },
-  { pos: [0, 35, 0], tilt: 0, burn: 'S-IC', sky: 0.35, pad: 1, stretch: 1.35, detached: [] },
-  { pos: [24, 420, 0], tilt: 12 * DEG, burn: 'S-IC', sky: 0.62, pad: 0.65, stretch: 2.0, detached: [] },
-  { pos: [110, 950, 0], tilt: 27 * DEG, burn: 'S-II', sky: 0.85, pad: 0, stretch: 1.5, detached: ['S-IC'] },
-  { pos: [300, 1550, 0], tilt: 45 * DEG, burn: 'S-II', sky: 1, pad: 0, stretch: 1.8, detached: ['S-IC', 'LES'] },
-  { pos: [560, 2150, 0], tilt: 63 * DEG, burn: 'S-IVB', sky: 1, pad: 0, stretch: 1.7, detached: ['S-IC', 'LES', 'S-II'] },
-  { pos: [700, 2450, 0], tilt: 70 * DEG, burn: null, sky: 1, pad: 0, stretch: 1, detached: ['S-IC', 'LES', 'S-II'] },
-  { pos: [700, 2450, 0], tilt: 70 * DEG, burn: null, sky: 1, pad: 0, stretch: 1, detached: ['S-IC', 'LES', 'S-II'] },
-  { pos: [700, 2450, 0], tilt: 70 * DEG, burn: null, sky: 1, pad: 0, stretch: 1, detached: ['S-IC', 'LES', 'S-II'] },
+  { pos: [0, 0, 0], tilt: 0, burn: null, sky: 0, pad: 1, stretch: 1, detached: [], csm: 'stowed', lm: false, env: ENV_HOME },
+  { pos: [0, 0, 0], tilt: 0, burn: 'S-IC', sky: 0, pad: 1, stretch: 1, detached: [], csm: 'stowed', lm: false, env: ENV_HOME },
+  { pos: [0, 35, 0], tilt: 0, burn: 'S-IC', sky: 0.35, pad: 1, stretch: 1.35, detached: [], csm: 'stowed', lm: false, env: ENV_HOME },
+  { pos: [24, 420, 0], tilt: 12 * DEG, burn: 'S-IC', sky: 0.62, pad: 0.65, stretch: 2.0, detached: [], csm: 'stowed', lm: false, env: ENV_HOME },
+  { pos: [110, 950, 0], tilt: 27 * DEG, burn: 'S-II', sky: 0.85, pad: 0, stretch: 1.5, detached: ['S-IC'], csm: 'stowed', lm: false, env: ENV_HOME },
+  { pos: [300, 1550, 0], tilt: 45 * DEG, burn: 'S-II', sky: 1, pad: 0, stretch: 1.8, detached: ['S-IC', 'LES'], csm: 'stowed', lm: false, env: ENV_HOME },
+  { pos: [560, 2150, 0], tilt: 63 * DEG, burn: 'S-IVB', sky: 1, pad: 0, stretch: 1.7, detached: ['S-IC', 'LES', 'S-II'], csm: 'stowed', lm: false, env: ENV_HOME },
+  {
+    pos: [760, 2510, 0], tilt: 70 * DEG, burn: null, sky: 1, pad: 0, stretch: 1,
+    detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'docked', lm: true,
+    env: { earth: [-2700, 800, -1500, 1, 1], moon: [5200, 2100, -900, 0.28, 1], light: LIGHT_SPACE },
+  },
+  {
+    pos: [860, 2560, 0], tilt: 70 * DEG, burn: null, sky: 1, pad: 0, stretch: 1,
+    detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'docked', lm: true,
+    env: { earth: [-4300, 300, -2400, 0.55, 1], moon: [2600, 200, -400, 0.95, 1], light: LIGHT_SPACE },
+  },
+  // 9's moon is sized/positioned so its top surface sits exactly under the
+  // LM's footpads at the settled pos; the 8->9 lerp path was checked to keep
+  // that surface below the descending vehicle the whole way.
+  {
+    pos: [980, 2080, 0], tilt: 0, burn: null, sky: 1, pad: 0, stretch: 1,
+    detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'gone', lm: true,
+    env: { earth: [-400, 4700, -2600, 0.12, 1], moon: [980, -379, 0, 1.7, 1], light: LIGHT_SPACE },
+  },
 ]
 
 // Timed beats, keyed by the phase being entered. `at` is seconds from beat
 // start. Event handlers take (choreography, instant) — instant means the
-// beat is being fast-forwarded (user scrolled again mid-beat / jumped away)
-// and only the state change should apply, no pyrotechnics.
+// beat is being fast-forwarded (user pressed space again mid-beat / jumped away)
+// and only the state change should apply, no pyrotechnics. Events that
+// start tweens must therefore leave the final transform to a later
+// instant-safe event (see the dock event).
 const BEATS = {
   // 2 -> 3: throttle through Max-Q. Continuous burn, plume stretches, pad
   // and blue sky fall away, heaviest camera shake of the flight.
@@ -191,17 +236,186 @@ const BEATS = {
       },
     ],
   },
-  // 6 -> 7: TLI complete — S-IVB cutoff, silent drift. (Phases beyond this
-  // are camera-only until the lunar assets exist.)
+  // 6 -> 7: TLI cutoff, then transposition & docking while Earth materializes
+  // behind. The long, quiet centerpiece: the SLA cone is discarded to reveal
+  // the LM, the CSM pulls ahead, flips end-over-end, glides back to dock,
+  // and finally the spent S-IVB drifts away below.
   7: {
-    duration: 4.0,
+    duration: 16.5,
     progress: easeInOutCubic,
-    valid: (c) => c._exhausts['S-IVB'].active,
+    // Environment (Earth reveal, sun swing) settles by ~55% so the backdrop
+    // is fully in while the docking plays out in front of it.
+    ease: (t) => easeInOutCubic(Math.min(t / 0.55, 1)),
+    valid: (c) => !c._detached.has('S-IVB') && c._csmState === 'stowed',
+    events: [
+      {
+        at: 0.9,
+        run: (c) => {
+          c._exhausts['S-IVB'].extinguish()
+          c._setVibe(0.12)
+        },
+      },
+      { at: 2.0, run: (c) => c._setVibe(0) },
+      { at: 3.2, run: (c) => c._setLmVisible(true) },
+      {
+        at: 3.3,
+        run: (c, instant) =>
+          c._separate('SLA', instant, {
+            along: 0.5,
+            back: -8, // slightly forward…
+            radial: 14, // …but mostly sideways, clear of the CSM above it
+            spinRate: 0.9,
+            flashScale: 10,
+            sparkSpeed: 7,
+            gravity: 0,
+          }),
+      },
+      {
+        at: 4.6,
+        run: (c, instant) => {
+          // CSM pulls ahead of the stack to get room for the flip.
+          if (instant) return // dock event applies the final transform
+          const csm = c._jettisonable['CSM']?.object
+          if (!csm) return
+          const fromY = csm.position.y
+          c._addTween(2.6, (t) => {
+            csm.position.y = fromY + 16 * t
+          })
+        },
+      },
+      {
+        at: 7.6,
+        run: (c, instant) => {
+          if (instant) return
+          const csm = c._jettisonable['CSM']?.object
+          if (!csm) return
+          c._addTween(3.4, (t) => {
+            csm.rotation.z = Math.PI * t
+          })
+        },
+      },
+      {
+        at: 11.4,
+        run: (c, instant) => {
+          if (instant) return
+          const csm = c._jettisonable['CSM']?.object
+          if (!csm) return
+          const fromY = csm.position.y
+          c._addTween(2.9, (t) => {
+            csm.position.y = THREE.MathUtils.lerp(fromY, c._dockLocalY, t)
+          })
+        },
+      },
+      {
+        at: 14.5,
+        run: (c, instant) => {
+          // Contact: instant-safe hard dock — snaps whatever the tweens
+          // reached to the exact docked transform.
+          const csm = c._jettisonable['CSM']?.object
+          if (csm) {
+            csm.position.y = c._dockLocalY
+            csm.rotation.set(0, 0, Math.PI)
+          }
+          c._csmState = 'docked'
+          if (!instant && csm) {
+            const pos = csm
+              .getWorldPosition(new THREE.Vector3())
+              .addScaledVector(c._axis(), -(csm.userData.apexOffset ?? 3.5))
+            c.flash.spawn(pos, { scale: 6, sparkSpeed: 3 })
+          }
+        },
+      },
+      {
+        at: 15.3,
+        run: (c, instant) =>
+          c._separate('S-IVB', instant, {
+            along: 0.4,
+            back: 9,
+            lateral: 1.2,
+            spinRate: 0.12,
+            flashScale: 16,
+            sparkSpeed: 10,
+            flashAtTop: true,
+            gravity: 0,
+          }),
+      },
+    ],
+  },
+  // 7 -> 8: lunar approach. The Moon swells ahead while Earth falls away to
+  // a marble; mid-phase the SPS lights for the braking burn — engine-first,
+  // which the transposition flip conveniently already arranged.
+  8: {
+    duration: 9.5,
+    progress: easeInOutCubic,
+    valid: (c) => c._csmState === 'docked' && c._detached.has('S-IVB'),
+    events: [
+      {
+        at: 0.8,
+        run: (c, instant) => {
+          c._exhausts['SPS'].ignite()
+          c._exhausts['SPS'].setStretch(1)
+          c._setVibe(0.45)
+          if (!instant) c._igniteFlash('SPS', 8, 5)
+        },
+      },
+      {
+        at: 6.8,
+        run: (c) => {
+          c._exhausts['SPS'].extinguish()
+          c._setVibe(0)
+        },
+      },
+    ],
+  },
+  // 8 -> 9: undocking and powered descent — the finale. The CSM departs,
+  // the descent engine lights, the LM rights itself as it drops, and the
+  // Moon's surface rises to meet it: dust, cutoff, stillness.
+  9: {
+    duration: 20,
+    // Motion (descent) completes at 86% so the touchdown events land on a
+    // settled vehicle; orientation/environment settle earlier still (78%) so
+    // the ground has stopped moving before contact.
+    progress: (t) => easeInOutCubic(Math.min(t / 0.86, 1)),
+    ease: (t) => easeInOutCubic(Math.min(t / 0.78, 1)),
+    valid: (c) => c._csmState === 'docked',
     events: [
       {
         at: 1.0,
+        run: (c, instant) => {
+          c._csmState = 'gone'
+          c._separate('CSM', instant, {
+            along: 0.2,
+            back: -7, // departs forward, off the LM's roof
+            lateral: 1.5,
+            spinRate: 0.08,
+            flashScale: 7,
+            sparkSpeed: 4,
+            gravity: 0,
+          })
+        },
+      },
+      {
+        at: 2.2,
         run: (c) => {
-          c._exhausts['S-IVB'].extinguish()
+          c._exhausts['DPS'].ignite()
+          c._exhausts['DPS'].setStretch(1)
+          c._setVibe(0.5)
+        },
+      },
+      {
+        at: 17.2,
+        run: (c, instant) => {
+          if (instant || !c._lmGroup) return
+          const pos = c._lmGroup
+            .getWorldPosition(new THREE.Vector3())
+            .addScaledVector(c._axis(), -(c._lmGroup.userData.bodyLength ?? 4.5) / 2)
+          c.flash.spawnDust(pos, { speed: 8 })
+        },
+      },
+      {
+        at: 17.6,
+        run: (c) => {
+          c._exhausts['DPS'].extinguish()
           c._setVibe(0)
         },
       },
@@ -222,6 +436,9 @@ export class StagingChoreography {
     sicExhaust,
     skyEnvironment,
     launchPad,
+    earth,
+    moon,
+    keyLight,
   }) {
     this.flowStore = flowStore
     this.sceneManager = sceneManager
@@ -231,6 +448,9 @@ export class StagingChoreography {
     this.launchSequence = launchSequence
     this.skyEnvironment = skyEnvironment
     this.launchPad = launchPad
+    this.earth = earth
+    this.moon = moon
+    this.keyLight = keyLight
 
     this.flash = new SeparationFlash(scene)
 
@@ -238,6 +458,8 @@ export class StagingChoreography {
     // stage groups exactly like the S-IC one built in SceneManager.
     const s2 = stageGroups.get('S-II')
     const s4 = stageGroups.get('S-IVB')
+    this._lmGroup = stageGroups.get('LM') ?? null
+    const csmBody = rocket.getObjectByName('CSM-Body')
     this._exhausts = {
       'S-IC': sicExhaust,
       'S-II': new ExhaustSystem(
@@ -251,15 +473,41 @@ export class StagingChoreography {
         EXHAUST_PRESETS.J2_SINGLE,
       ),
     }
+    if (csmBody) {
+      this._exhausts.SPS = new ExhaustSystem(
+        csmBody,
+        (csmBody.userData.engineOffsetY ?? -4),
+        EXHAUST_PRESETS.SPS_SINGLE,
+      )
+    }
+    if (this._lmGroup) {
+      this._exhausts.DPS = new ExhaustSystem(
+        this._lmGroup,
+        -(this._lmGroup.userData.bodyLength ?? 4.5) / 2 + 0.35,
+        EXHAUST_PRESETS.DPS_SINGLE,
+      )
+    }
 
     // Everything that can leave the stack, with its home attachment +
     // transform so any jump/inspect round-trip can rebuild the full vehicle.
     this._jettisonable = {}
-    ;['S-IC', 'S-II'].forEach((id) => this._storeHome(id, stageGroups.get(id)))
+    ;['S-IC', 'S-II', 'S-IVB'].forEach((id) => this._storeHome(id, stageGroups.get(id)))
     const lesGroup = rocket.getObjectByName('LES')
     if (lesGroup) this._storeHome('LES', lesGroup)
+    this._storeHome('SLA', rocket.getObjectByName('CSM-SLA-Adapter'))
+    if (csmBody) this._storeHome('CSM', csmBody)
 
-    this._homeRocketPosition = rocket.position.clone()
+    // Docked transform for the transposed CSM (local to its stage group):
+    // rotated 180°, positioned so the CM apex kisses the LM's docking hatch.
+    // Computed here while the whole stack still sits assembled at the pad
+    // (rocket at origin, identity), where world y == rocket-local y.
+    this._dockLocalY = csmBody ? csmBody.position.y : 0
+    if (csmBody && this._lmGroup) {
+      rocket.updateWorldMatrix(true, true)
+      const lmTopY = new THREE.Box3().setFromObject(this._lmGroup).max.y
+      const stageY = csmBody.parent.getWorldPosition(new THREE.Vector3()).y
+      this._dockLocalY = lmTopY - stageY + (csmBody.userData.apexOffset ?? 3.5) + 0.12
+    }
 
     // Pad materials cached for the altitude fade. While fading, the pad
     // joins the transparent render pass, where its huge apron sorts as
@@ -279,12 +527,15 @@ export class StagingChoreography {
     this._debris = []
     this._beat = null
     this._glide = null
+    this._tweens = []
+    this._csmState = 'stowed'
     this._vibe = 0
     this._time = 0
     this._rocketVel = new THREE.Vector3()
     this._prevFlightPos = rocket.position.clone()
     this._flightPos = rocket.position.clone()
     this._flightTilt = 0
+    this._envNow = structuredClone(ENV_HOME)
 
     const snapshot = flowStore.getSnapshot()
     this._phase = snapshot.flow.phase
@@ -339,7 +590,7 @@ export class StagingChoreography {
 
     if (next >= 3 && launchDriving) {
       // Test-rig jump out of a running countdown/liftoff: take over, and
-      // unlock the scroll stepper that would otherwise wait forever.
+      // unlock the space stepper that would otherwise wait forever.
       this.launchSequence.interrupt()
       queueMicrotask(() => this.flowStore.completeAutoplay())
     }
@@ -353,26 +604,29 @@ export class StagingChoreography {
   }
 
   _enterInspect() {
-    // Inspection is a diorama, not mission state: interrupt any flight,
-    // rebuild the full stack at the pad, kill effects. Exiting re-syncs to
-    // whatever phase the flow is on.
+    // Inspection freezes the mission exactly where it stands — no rebuild,
+    // no pad reset. Whichever stages are still attached, the CSM's current
+    // state, and the current environment all stay as they are; only
+    // motion/animation stops, so the explode view is a snapshot of the real
+    // vehicle at this moment. Exiting re-syncs to whatever phase the flow is
+    // on (via _snapTo, which correctly re-detaches/restores from scratch).
     this.launchSequence?.interrupt()
     if (this._beat) this._finishBeat()
     this._glide = null
+    this._flushTweens()
     this._clearDebris()
-    Object.keys(this._jettisonable).forEach((id) => this._restore(id))
     Object.values(this._exhausts).forEach((exhaust) => exhaust.extinguish())
     this.flash.clear()
     this._setVibe(0)
+  }
 
-    this.rocket.position.copy(this._homeRocketPosition)
-    this.rocket.rotation.set(0, 0, 0)
-    this._flightPos.copy(this._homeRocketPosition)
-    this._flightTilt = 0
-
-    // Dark starfield backdrop reads best behind the exploded stack.
-    this.skyEnvironment.setAltitudeFactor(1)
-    this._setPadOpacity(1)
+  // Whether `id` (an InspectionController stageGroups key) is still part of
+  // the vehicle right now — false once jettisoned, or for the LM before its
+  // transposition-beat reveal. Lets inspection hide labels/exploded slots
+  // for hardware that isn't actually there anymore.
+  isStagePresent(id) {
+    if (id === 'LM') return this._lmGroup?.visible ?? false
+    return !this._detached.has(id)
   }
 
   // ---------------------------------------------------------------- beats
@@ -395,12 +649,14 @@ export class StagingChoreography {
       tilt: this._flightTilt,
       sky: this.skyEnvironment.dome.material.uniforms.uAltitudeFactor.value,
       pad: this._padOpacity,
+      env: structuredClone(this._envNow),
     }
   }
 
   _finishBeat() {
     const beat = this._beat
     this._beat = null
+    this._flushTweens()
     this._applyContinuous(beat.from, beat.to, 1, 1)
     for (let i = beat.eventIndex; i < beat.spec.events.length; i += 1) {
       beat.spec.events[i].run(this, true)
@@ -416,6 +672,53 @@ export class StagingChoreography {
     this._flightTilt = THREE.MathUtils.lerp(from.tilt, to.tilt, easeT)
     this.skyEnvironment.setAltitudeFactor(THREE.MathUtils.lerp(from.sky, to.sky, easeT))
     this._setPadOpacity(THREE.MathUtils.lerp(from.pad, to.pad, easeT))
+
+    const now = this._envNow
+    for (const key of Object.keys(now)) {
+      const a = from.env[key]
+      const b = to.env[key]
+      for (let i = 0; i < now[key].length; i += 1) {
+        now[key][i] = THREE.MathUtils.lerp(a[i], b[i], easeT)
+      }
+    }
+    this._applyEnvNow()
+  }
+
+  _applyEnv(env) {
+    this._envNow = structuredClone(env)
+    this._applyEnvNow()
+  }
+
+  _applyEnvNow() {
+    const { earth, moon, light } = this._envNow
+    this.earth?.apply(...earth)
+    this.moon?.apply(...moon)
+    this.keyLight?.position.set(...light)
+  }
+
+  // ---------------------------------------------------------------- tweens
+
+  // Minimal per-beat animation driver for objects the continuous channel
+  // doesn't cover (the CSM's transposition moves). apply() receives eased
+  // 0-1; _flushTweens() jumps everything to its end state so beats can be
+  // fast-forwarded safely.
+  _addTween(duration, apply) {
+    this._tweens.push({ elapsed: 0, duration, apply })
+  }
+
+  _flushTweens() {
+    this._tweens.forEach((tween) => tween.apply(1))
+    this._tweens = []
+  }
+
+  _updateTweens(dt) {
+    for (let i = this._tweens.length - 1; i >= 0; i -= 1) {
+      const tween = this._tweens[i]
+      tween.elapsed += dt
+      const t = Math.min(tween.elapsed / tween.duration, 1)
+      tween.apply(easeInOutCubic(t))
+      if (t >= 1) this._tweens.splice(i, 1)
+    }
   }
 
   // ---------------------------------------------------------------- snap
@@ -424,14 +727,33 @@ export class StagingChoreography {
   // immediately, continuous ones glide over ~a second so jumps don't pop.
   _snapTo(phase, { glide = true } = {}) {
     if (this._beat) this._finishBeat()
+    this._flushTweens()
     const target = SETTLED[phase]
 
     this._clearDebris()
     this.flash.clear()
     Object.keys(this._jettisonable).forEach((id) => {
+      if (id === 'CSM') return // handled by the csm layout below
       if (target.detached.includes(id)) this._detachInstant(id)
       else this._restore(id)
     })
+
+    // CSM layout: stowed rides the stack, docked is flipped nose-onto-LM,
+    // gone means it has already departed before the descent.
+    if (this._jettisonable.CSM) {
+      if (target.csm === 'gone') {
+        this._detachInstant('CSM')
+      } else {
+        this._restore('CSM')
+        if (target.csm === 'docked') {
+          const csm = this._jettisonable.CSM.object
+          csm.position.y = this._dockLocalY
+          csm.rotation.set(0, 0, Math.PI)
+        }
+      }
+    }
+    this._csmState = target.csm
+    this._setLmVisible(target.lm)
 
     Object.entries(this._exhausts).forEach(([id, exhaust]) => {
       if (id === target.burn) {
@@ -458,6 +780,10 @@ export class StagingChoreography {
 
   _axis() {
     return new THREE.Vector3(0, 1, 0).applyQuaternion(this.rocket.quaternion)
+  }
+
+  _setLmVisible(visible) {
+    if (this._lmGroup) this._lmGroup.visible = visible
   }
 
   _separate(id, instant, opts) {
@@ -491,11 +817,23 @@ export class StagingChoreography {
       .addScaledVector(axis, -opts.back)
       .add(
         new THREE.Vector3(
-          (Math.random() - 0.5) * opts.lateral,
+          (Math.random() - 0.5) * (opts.lateral ?? 0),
           0,
-          (Math.random() - 0.5) * opts.lateral,
+          (Math.random() - 0.5) * (opts.lateral ?? 0),
         ),
       )
+
+    // radial: guaranteed speed perpendicular to the stack axis (random
+    // direction) — for shroud-style discards that must clear the vehicle
+    // sideways instead of sliding through what's above them.
+    if (opts.radial) {
+      const angle = Math.random() * Math.PI * 2
+      const perpA = new THREE.Vector3().crossVectors(axis, new THREE.Vector3(0, 0, 1)).normalize()
+      const perpB = new THREE.Vector3().crossVectors(axis, perpA).normalize()
+      velocity
+        .addScaledVector(perpA, Math.cos(angle) * opts.radial)
+        .addScaledVector(perpB, Math.sin(angle) * opts.radial)
+    }
 
     const spinAxis = new THREE.Vector3(0.15 * (Math.random() - 0.5), 0, 1).normalize()
     this._debris.push({
@@ -503,6 +841,7 @@ export class StagingChoreography {
       velocity,
       spinAxis,
       spinRate: opts.spinRate * (0.8 + Math.random() * 0.4),
+      gravity: opts.gravity ?? DEBRIS_GRAVITY,
       age: 0,
     })
   }
@@ -530,11 +869,11 @@ export class StagingChoreography {
     this._debris = []
   }
 
-  _igniteFlash(stageId) {
+  _igniteFlash(stageId, scale = 15, sparkSpeed = 9) {
     const group = this._exhausts[stageId]?.group
     if (!group) return
     const pos = group.getWorldPosition(new THREE.Vector3())
-    this.flash.spawn(pos, { scale: 15, sparkSpeed: 9 })
+    this.flash.spawn(pos, { scale, sparkSpeed })
   }
 
   _setVibe(gain) {
@@ -557,13 +896,15 @@ export class StagingChoreography {
 
   update(dt) {
     this.flash.update(dt)
-    this._exhausts['S-II'].update(dt)
-    this._exhausts['S-IVB'].update(dt)
+    Object.entries(this._exhausts).forEach(([id, exhaust]) => {
+      if (id !== 'S-IC') exhaust.update(dt) // S-IC's is updated by SceneManager
+    })
 
     if (this._mode === 'inspect') return
 
     this._time += dt
     this._updateDebris(dt)
+    this._updateTweens(dt)
 
     let owns = false
     if (this._beat) {
@@ -571,13 +912,20 @@ export class StagingChoreography {
       const beat = this._beat
       beat.elapsed += dt
       const t = Math.min(beat.elapsed / beat.spec.duration, 1)
-      this._applyContinuous(beat.from, beat.to, beat.spec.progress(t), easeInOutCubic(t))
+      this._applyContinuous(
+        beat.from,
+        beat.to,
+        beat.spec.progress(t),
+        (beat.spec.ease ?? easeInOutCubic)(t),
+      )
       const events = beat.spec.events
       while (beat.eventIndex < events.length && events[beat.eventIndex].at <= beat.elapsed) {
         events[beat.eventIndex].run(this, false)
         beat.eventIndex += 1
       }
-      if (t >= 1 && beat.eventIndex >= events.length) this._beat = null
+      if (t >= 1 && beat.eventIndex >= events.length && this._tweens.length === 0) {
+        this._beat = null
+      }
     } else if (this._glide) {
       owns = true
       const glide = this._glide
@@ -623,7 +971,7 @@ export class StagingChoreography {
     for (let i = this._debris.length - 1; i >= 0; i -= 1) {
       const debris = this._debris[i]
       debris.age += dt
-      debris.velocity.y -= DEBRIS_GRAVITY * dt
+      debris.velocity.y -= debris.gravity * dt
       debris.object.position.addScaledVector(debris.velocity, dt)
       debris.object.rotateOnWorldAxis(debris.spinAxis, debris.spinRate * dt)
 
@@ -638,8 +986,9 @@ export class StagingChoreography {
   dispose() {
     this._unsubscribe()
     this.flash.dispose()
-    this._exhausts['S-II'].dispose()
-    this._exhausts['S-IVB'].dispose()
+    Object.entries(this._exhausts).forEach(([id, exhaust]) => {
+      if (id !== 'S-IC') exhaust.dispose() // S-IC's is owned by SceneManager
+    })
     this._clearDebris()
   }
 }

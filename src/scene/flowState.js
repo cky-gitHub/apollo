@@ -1,5 +1,5 @@
 // State shape for the flow/inspect scene mode, plus a small subscribable
-// store on top of it. No scroll listener here (out of scope for now) — the
+// store on top of it. No key listener here (out of scope for now) — the
 // only built-in driver is the phase-0 countdown ticker described below.
 
 export function createFlowState() {
@@ -7,7 +7,7 @@ export function createFlowState() {
     mode: 'flow', // 'flow' | 'inspect'
     flow: {
       phase: 0, // 0-9, discrete step
-      // TEMP: defaults true so scroll-stepper works immediately for testing,
+      // TEMP: defaults true so space-stepper works immediately for testing,
       // before the countdown/liftoff sequence exists to flip it for real.
       // Flip this back to false once that sequence lands.
       autoplayComplete: true,
@@ -21,8 +21,8 @@ export function createFlowState() {
 const COUNTDOWN_START_SECONDS = 10
 
 // Ticks the phase-0 countdown down to 0 once per second, then flips
-// autoplayComplete — the signal that (per the skill) unlocks the scroll
-// listener elsewhere. Exposes a useSyncExternalStore-compatible
+// autoplayComplete — the signal that (per the skill) unlocks the space-bar
+// stepper elsewhere. Exposes a useSyncExternalStore-compatible
 // subscribe/getSnapshot pair for React consumers (see Hud.jsx).
 export class FlowStore {
   constructor() {
@@ -61,7 +61,7 @@ export class FlowStore {
 
   // Marks autoplay done outside the countdown ticker — used when the staging
   // choreography takes over from an interrupted countdown/liftoff (test-rig
-  // phase jump), so the scroll stepper doesn't stay locked forever.
+  // phase jump), so the space stepper doesn't stay locked forever.
   completeAutoplay() {
     if (this.state.flow.autoplayComplete) return
     this.state = {

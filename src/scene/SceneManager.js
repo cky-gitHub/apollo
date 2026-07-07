@@ -6,10 +6,13 @@ import {
   DEFAULT_TRANSITION_DURATION,
 } from './cameraPath.js'
 import { InspectionController } from './inspection.js'
-import { ScrollStepper } from './scrollStepper.js'
+import { SpaceStepper } from './spaceStepper.js'
+import { FreeLookControl } from './freeLook.js'
 import { PhaseTestRig } from './phaseTestRig.js' // TEMP: test rig — remove before ship
 import { buildLaunchPad } from './environment/LaunchPad.js'
 import { SkyEnvironment } from './environment/Sky.js'
+import { Earth } from './environment/Earth.js'
+import { Moon } from './environment/Moon.js'
 import { ExhaustSystem, EXHAUST_PRESETS } from './particles/ExhaustSystem.js'
 import { LaunchSequence } from './sequences/LaunchSequence.js'
 import { StagingChoreography } from './sequences/StagingChoreography.js'
@@ -20,11 +23,11 @@ import { StagingChoreography } from './sequences/StagingChoreography.js'
 const CAMERA_FOLLOW_LAMBDA = 7
 const SHAKE_GAIN_LAMBDA = 4
 
-// Canonical vantage for entering inspect mode. The choreography rebuilds the
-// full stack at the pad when inspection opens, so the camera must move there
-// too — mid-flight it could be kilometers away from the diorama.
-const INSPECT_CAMERA_POSITION = [85, 90, 200]
-const INSPECT_CAMERA_TARGET = [0, 55, 0]
+// Camera offset for entering inspect mode, added to the current stack's
+// world-space focus point (inspection.getFocusWorldPosition() — NOT a fixed
+// pad spot, since inspection no longer repositions the vehicle: it freezes
+// wherever the mission currently is).
+const INSPECT_CAMERA_OFFSET = new THREE.Vector3(92, 36, 228)
 
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
@@ -50,7 +53,9 @@ export class SceneManager {
 
     this.currentPhase = 0
     this._cameraTransition = null
-    this._orbitAngle = 0
+    this._autoOrbitAngle = 0
+    this._manualAzimuth = 0
+    this._manualPolar = 0
     this._shakeGain = 0
     this._shakeGainTarget = 1
     this._shakeTime = 0
@@ -86,6 +91,11 @@ export class SceneManager {
     this.launchPad = buildLaunchPad()
     this.scene.add(this.launchPad)
 
+    // Trans-lunar backdrop bodies, hidden until the choreography reveals
+    // them from phase 7 on.
+    this.earth = new Earth(this.scene)
+    this.moon = new Moon(this.scene)
+
     this.rocket = null
     this.stageGroups = new Map()
     this.inspection = null
@@ -100,7 +110,15 @@ export class SceneManager {
     this._labelContainer.style.display = 'none'
     container.appendChild(this._labelContainer)
 
-    this.scrollStepper = new ScrollStepper({ flowStore })
+    this.spaceStepper = new SpaceStepper({ flowStore })
+    this.freeLook = new FreeLookControl({
+      domElement: this.renderer.domElement,
+      flowStore,
+      onOrbit: (azimuthDelta, polarDelta) => {
+        this._manualAzimuth += azimuthDelta
+        this._manualPolar += polarDelta
+      },
+    })
     this.testRig = new PhaseTestRig({ flowStore }) // TEMP: test rig — remove before ship
 
     this.mode = 'flow'
@@ -112,10 +130,12 @@ export class SceneManager {
         if (previousMode === 'inspect' && state.mode === 'flow') {
           this._reengageCameraFromInspect()
         } else if (state.mode === 'inspect') {
-          this.camera.position.set(...INSPECT_CAMERA_POSITION)
-          this.camera.lookAt(...INSPECT_CAMERA_TARGET)
-          this._camPos.set(...INSPECT_CAMERA_POSITION)
-          this._camTarget.set(...INSPECT_CAMERA_TARGET)
+          const focus = this.inspection.getFocusWorldPosition()
+          const camPos = focus.clone().addScaledVector(INSPECT_CAMERA_OFFSET, this.inspection.getFramingScale())
+          this.camera.position.copy(camPos)
+          this.camera.lookAt(focus)
+          this._camPos.copy(camPos)
+          this._camTarget.copy(focus)
         }
       }
       if (state.flow.phase !== this.currentPhase) this.setPhase(state.flow.phase)
@@ -177,7 +197,11 @@ export class SceneManager {
       sicExhaust: this.exhaust,
       skyEnvironment: this.sky,
       launchPad: this.launchPad,
+      earth: this.earth,
+      moon: this.moon,
+      keyLight: this.keyLight,
     })
+    this.inspection.setChoreography(this.choreography)
   }
 
   start() {
@@ -219,9 +243,12 @@ export class SceneManager {
       }
     }
 
-    // Each phase's slow orbit starts fresh; the captured offsets above
-    // already include whatever rotation the old phase had accumulated.
-    this._orbitAngle = 0
+    // Each phase's slow orbit (and any free-look the user dialed in) starts
+    // fresh; the captured offsets above already include whatever rotation
+    // the old phase had accumulated.
+    this._autoOrbitAngle = 0
+    this._manualAzimuth = 0
+    this._manualPolar = 0
     this._cameraTransition = {
       from,
       to: toPose,
@@ -259,7 +286,8 @@ export class SceneManager {
   _updateCamera(dt) {
     const now = performance.now()
     const currentPose = getCameraPose(this.currentPhase)
-    this._orbitAngle += (currentPose.orbitSpeed ?? 0) * dt
+    this._autoOrbitAngle += (currentPose.orbitSpeed ?? 0) * dt
+    const orbit = { azimuth: this._autoOrbitAngle + this._manualAzimuth, polar: this._manualPolar }
 
     let shakeAmp = (currentPose.shake ?? 0)
     const transition = this._cameraTransition
@@ -269,14 +297,14 @@ export class SceneManager {
       resolvePoseWorld(
         transition.from,
         this.rocket,
-        this._orbitAngle,
+        orbit,
         this._poseFromPos,
         this._poseFromTarget,
       )
       resolvePoseWorld(
         transition.to,
         this.rocket,
-        this._orbitAngle,
+        orbit,
         this._poseToPos,
         this._poseToTarget,
       )
@@ -292,7 +320,7 @@ export class SceneManager {
       resolvePoseWorld(
         currentPose,
         this.rocket,
-        this._orbitAngle,
+        orbit,
         this._poseToPos,
         this._poseToTarget,
       )
@@ -362,7 +390,8 @@ export class SceneManager {
     this.inspection?.dispose()
     this.launchSequence?.dispose()
     this.choreography?.dispose()
-    this.scrollStepper.dispose()
+    this.spaceStepper.dispose()
+    this.freeLook.dispose()
     this.testRig.dispose() // TEMP: test rig — remove before ship
     this._labelContainer.remove()
     this.renderer.dispose()
