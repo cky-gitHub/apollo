@@ -6,6 +6,9 @@ const STAGE_TRANSITION_DURATION = 800 // ms
 const CLICK_DRAG_THRESHOLD = 5 // px of pointer movement still counted as a click
 const FRAMING_PADDING = 30 // m, so a single remaining stage still gets a non-zero span to frame
 const MIN_FRAMING_SCALE = 0.2 // floor so framing never zooms in absurdly close
+const SVG_NS = 'http://www.w3.org/2000/svg'
+const LABEL_OFFSET_X = 110 // px, callout sits this far to the side of its stage's screen anchor
+const LABEL_OFFSET_Y = -6 // px
 
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
@@ -40,19 +43,47 @@ export class InspectionController {
     this.controls.maxDistance = 260
 
     this._labelContainer = labelContainer
+
+    // Leader lines + anchor dots live in one SVG layer under the label text,
+    // so each callout reads as "floating text, pointing back at its stage"
+    // rather than a box glued to the mesh.
+    this._svg = document.createElementNS(SVG_NS, 'svg')
+    Object.assign(this._svg.style, {
+      position: 'absolute',
+      inset: '0',
+      width: '100%',
+      height: '100%',
+      overflow: 'visible',
+      pointerEvents: 'none',
+    })
+    labelContainer.appendChild(this._svg)
+
     this._labelElements = new Map()
+    this._leaderLines = new Map()
+    this._anchorDots = new Map()
     stageGroups.forEach((group, stageId) => {
+      const line = document.createElementNS(SVG_NS, 'line')
+      line.setAttribute('stroke', 'rgba(255, 255, 255, 0.55)')
+      line.setAttribute('stroke-width', '1')
+      this._svg.appendChild(line)
+      this._leaderLines.set(stageId, line)
+
+      const dot = document.createElementNS(SVG_NS, 'circle')
+      dot.setAttribute('r', '2.5')
+      dot.setAttribute('fill', 'rgba(255, 255, 255, 0.85)')
+      this._svg.appendChild(dot)
+      this._anchorDots.set(stageId, dot)
+
       const el = document.createElement('div')
       el.textContent = group.userData.label ?? stageId
       Object.assign(el.style, {
         position: 'absolute',
-        padding: '2px 6px',
-        background: 'rgba(6, 12, 20, 0.6)',
-        border: '1px solid rgba(215, 244, 255, 0.25)',
-        borderRadius: '3px',
-        color: '#d7f4ff',
-        fontFamily: 'ui-monospace, monospace',
-        fontSize: '12px',
+        color: '#ffffff',
+        fontFamily: 'var(--label-font, Inter, system-ui, sans-serif)',
+        fontWeight: '300',
+        fontSize: '16px',
+        letterSpacing: '0.02em',
+        textShadow: '0 1px 6px rgba(0, 0, 0, 0.85), 0 0 16px rgba(0, 0, 0, 0.5)',
         whiteSpace: 'nowrap',
         pointerEvents: 'none',
         display: 'none',
