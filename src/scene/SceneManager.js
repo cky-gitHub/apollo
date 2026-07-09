@@ -3,6 +3,7 @@ import { buildRocketStack } from './rocket/RocketAssembly.js'
 import {
   getCameraPose,
   resolvePoseWorld,
+  orbitOffset,
   DEFAULT_TRANSITION_DURATION,
 } from './cameraPath.js'
 import { InspectionController } from './inspection.js'
@@ -13,6 +14,7 @@ import { buildLaunchPad } from './environment/LaunchPad.js'
 import { SkyEnvironment } from './environment/Sky.js'
 import { Earth } from './environment/Earth.js'
 import { Moon } from './environment/Moon.js'
+import { Ocean } from './environment/Ocean.js'
 import { ExhaustSystem, EXHAUST_PRESETS } from './particles/ExhaustSystem.js'
 import { LaunchSequence } from './sequences/LaunchSequence.js'
 import { StagingChoreography } from './sequences/StagingChoreography.js'
@@ -95,6 +97,8 @@ export class SceneManager {
     // them from phase 7 on.
     this.earth = new Earth(this.scene)
     this.moon = new Moon(this.scene)
+    // Pacific recovery zone, hidden until the reentry beat fades it in.
+    this.ocean = new Ocean(this.scene)
 
     this.rocket = null
     this.stageGroups = new Map()
@@ -115,8 +119,19 @@ export class SceneManager {
       domElement: this.renderer.domElement,
       flowStore,
       onOrbit: (azimuthDelta, polarDelta) => {
-        this._manualAzimuth += azimuthDelta
-        this._manualPolar += polarDelta
+        if (this.mode === 'inspect') {
+          // Inspect mode's camera is OrbitControls-driven, not routed
+          // through cameraPath.js — rotate it directly around its own
+          // target using the same spherical math, instead of the
+          // flow-mode _manualAzimuth/_manualPolar accumulators below.
+          const controls = this.inspection.controls
+          const offset = this.camera.position.clone().sub(controls.target)
+          orbitOffset(offset, azimuthDelta, polarDelta)
+          this.camera.position.copy(controls.target).add(offset)
+        } else {
+          this._manualAzimuth += azimuthDelta
+          this._manualPolar += polarDelta
+        }
       },
     })
     this.testRig = new PhaseTestRig({ flowStore }) // TEMP: test rig — remove before ship
@@ -199,6 +214,7 @@ export class SceneManager {
       launchPad: this.launchPad,
       earth: this.earth,
       moon: this.moon,
+      ocean: this.ocean,
       keyLight: this.keyLight,
     })
     this.inspection.setChoreography(this.choreography)

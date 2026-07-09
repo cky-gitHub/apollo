@@ -5,37 +5,86 @@ import * as THREE from 'three'
 // the growing destination during the approach AND the landing terrain in
 // phase 9 — the descent flies down to the sphere's top surface, so there's
 // no seam where a "terrain patch" would have to take over. A tiled
-// canvas-noise bump map sells surface relief once the LM gets close, where
-// the 4k color map alone would read flat.
+// procedural crater-field bump map (bowls + raised rims + regolith grain)
+// sells surface relief once the LM gets close, where the 4k color map alone
+// would read flat.
 //
 // Texture: NASA SVS "CGI Moon Kit" LROC color map (public domain).
 const MOON_TEXTURE_URL = '/textures/moon_lroc_color_4k.jpg'
 export const MOON_RADIUS = 1500 // world units at scale 1
 
-function buildNoiseBumpTexture(size = 256) {
+// Deterministic PRNG so the crater field (and therefore screenshots) is
+// stable across loads.
+function mulberry32(seed) {
+  let a = seed
+  return () => {
+    a |= 0
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// Tiled crater-field heightmap: mid-gray regolith base, fine blotted noise,
+// then a few hundred craters — each a dark bowl inside a bright raised rim,
+// drawn large-to-small so young small craters overprint old big ones, with
+// wrap-around copies at the edges so the tiling has no seams. At the
+// phase-9/10 repeat density this puts ~10 m to ~150 m craters around the LM,
+// which is what sells the surface once the descent gets close.
+function buildCraterBumpTexture(size = 1024, craterCount = 240) {
+  const random = mulberry32(19690720)
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')
-  const image = ctx.createImageData(size, size)
-  for (let i = 0; i < size * size; i += 1) {
-    const v = 128 + (Math.random() - 0.5) * 110
-    image.data[i * 4] = v
-    image.data[i * 4 + 1] = v
-    image.data[i * 4 + 2] = v
-    image.data[i * 4 + 3] = 255
+
+  ctx.fillStyle = 'rgb(128,128,128)'
+  ctx.fillRect(0, 0, size, size)
+
+  // Regolith grain: sparse translucent blotches in place of per-pixel noise.
+  for (let i = 0; i < 2600; i += 1) {
+    const v = 128 + (random() - 0.5) * 90
+    const r = 1 + random() * 3.5
+    ctx.fillStyle = `rgba(${v | 0},${v | 0},${v | 0},0.35)`
+    ctx.beginPath()
+    ctx.arc(random() * size, random() * size, r, 0, Math.PI * 2)
+    ctx.fill()
   }
-  ctx.putImageData(image, 0, 0)
-  // A soft self-blot pass turns per-pixel noise into blobbier, regolith-like
-  // patches instead of TV static.
-  ctx.globalAlpha = 0.5
-  ctx.drawImage(canvas, -1, 0)
-  ctx.drawImage(canvas, 1, 1)
-  ctx.globalAlpha = 1
+
+  const drawCrater = (x, y, r, k) => {
+    const bowl = ctx.createRadialGradient(x, y, 0, x, y, r)
+    bowl.addColorStop(0, `rgba(0,0,0,${0.8 * k})`)
+    bowl.addColorStop(0.58, `rgba(40,40,40,${0.55 * k})`)
+    bowl.addColorStop(0.7, 'rgba(128,128,128,0)')
+    bowl.addColorStop(0.8, `rgba(255,255,255,${0.7 * k})`)
+    bowl.addColorStop(1, 'rgba(128,128,128,0)')
+    ctx.fillStyle = bowl
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  for (let i = 0; i < craterCount; i += 1) {
+    // Power-law sizes: many small, few large; large ones drawn first.
+    const t = i / craterCount
+    const r = 5 + 65 * (1 - t) ** 2.6 * (0.6 + random() * 0.4)
+    const k = 0.35 + random() * 0.5
+    const x = random() * size
+    const y = random() * size
+    for (const dx of [-size, 0, size]) {
+      for (const dy of [-size, 0, size]) {
+        if (x + dx > -r && x + dx < size + r && y + dy > -r && y + dy < size + r) {
+          drawCrater(x + dx, y + dy, r, k)
+        }
+      }
+    }
+  }
+
   const texture = new THREE.CanvasTexture(canvas)
   texture.wrapS = THREE.RepeatWrapping
   texture.wrapT = THREE.RepeatWrapping
-  texture.repeat.set(48, 24)
+  texture.repeat.set(16, 8)
   return texture
 }
 
@@ -52,8 +101,8 @@ export class Moon {
 
     this._material = new THREE.MeshStandardMaterial({
       map: texture,
-      bumpMap: buildNoiseBumpTexture(),
-      bumpScale: 2.2,
+      bumpMap: buildCraterBumpTexture(),
+      bumpScale: 3.2,
       roughness: 1,
       metalness: 0,
       transparent: true,

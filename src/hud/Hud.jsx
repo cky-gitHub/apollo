@@ -1,88 +1,135 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { PHASES } from '../data/phases.js'
+import { PHASES, MAX_PHASE } from '../data/phases.js'
 import './Hud.css'
 
-const MAX_PHASE = PHASES.length - 1
-
-function pad(value, width) {
-  return String(Math.max(0, Math.trunc(value))).padStart(width, '0')
-}
-
-// hh:mm:ss, for both the T- countdown and the T+ mission-elapsed clock.
-function formatClock(totalSeconds) {
-  const s = Math.max(0, Math.trunc(totalSeconds))
-  const hh = Math.floor(s / 3600)
-  const mm = Math.floor((s % 3600) / 60)
-  const ss = s % 60
-  return `${pad(hh, 2)}:${pad(mm, 2)}:${pad(ss, 2)}`
-}
-
-// Mission clock: T- counts down pre-liftoff (driven by flowStore's own
-// countdown ticker), T+ counts up from the moment autoplayComplete flips —
-// tracked locally so this is a display-only concern, not new flow state.
-function useMissionClock(autoplayComplete, countdownSeconds) {
-  const liftoffAtRef = useRef(null)
-  const [nowMs, setNowMs] = useState(() => Date.now())
+// Spools a displayed number toward its target with an ease-out, so phase
+// steps read as live instrument sweeps instead of value pops. Purely a
+// display concern — targets come straight from PHASES data.
+function useSpooledValue(target, duration = 2400) {
+  const [display, setDisplay] = useState(target)
+  const displayRef = useRef(target)
 
   useEffect(() => {
-    if (autoplayComplete) {
-      if (liftoffAtRef.current === null) liftoffAtRef.current = Date.now()
-    } else {
-      // Cleared (not just left alone) so a re-armed countdown (LaunchSequence
-      // restarting via resetCountdown) captures a fresh liftoff time on its
-      // next true transition, instead of reusing a stale one from earlier.
-      liftoffAtRef.current = null
+    const from = displayRef.current
+    if (from === target) return undefined
+    const start = performance.now()
+    let frameId
+    const tick = () => {
+      const t = Math.min((performance.now() - start) / duration, 1)
+      const eased = 1 - (1 - t) ** 3
+      const value = from + (target - from) * eased
+      displayRef.current = value
+      setDisplay(value)
+      if (t < 1) frameId = requestAnimationFrame(tick)
     }
-  }, [autoplayComplete])
+    frameId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frameId)
+  }, [target, duration])
 
-  useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [])
+  return display
+}
 
-  if (!autoplayComplete) {
-    return { prefix: 'T-', text: formatClock(Math.ceil(countdownSeconds)) }
+// Ground Elapsed Time in NASA's 000:00:00 form (hours can pass 100 on an
+// 8-day mission — three digits is the authentic width).
+function formatGet(totalSeconds) {
+  const sign = totalSeconds < 0 ? '-' : '+'
+  const s = Math.round(Math.abs(totalSeconds))
+  const hh = String(Math.floor(s / 3600)).padStart(3, '0')
+  const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0')
+  const ss = String(s % 60).padStart(2, '0')
+  return `${sign}${hh}:${mm}:${ss}`
+}
+
+function formatKm(km) {
+  if (km < 10) return km.toFixed(1)
+  return Math.round(km).toLocaleString('en-US')
+}
+
+function hintFor(state) {
+  if (state.mode === 'inspect') {
+    return { keys: 'ESC', label: 'Resume flight' }
   }
-  const elapsedSeconds = liftoffAtRef.current ? (nowMs - liftoffAtRef.current) / 1000 : 0
-  return { prefix: 'T+', text: formatClock(elapsedSeconds) }
+  if (!state.flow.autoplayComplete) {
+    return { keys: null, label: 'Auto sequence running' }
+  }
+  if (state.flow.phase >= MAX_PHASE) {
+    return { keys: null, label: 'Mission complete · Crew recovered' }
+  }
+  return { keys: 'SPACE', label: `Next · ${PHASES[state.flow.phase + 1].name}` }
 }
 
 function Hud({ flowStore }) {
   const state = useSyncExternalStore(flowStore.subscribe, flowStore.getSnapshot)
   const phase = PHASES[state.flow.phase] ?? PHASES[0]
-  const clock = useMissionClock(state.flow.autoplayComplete, state.countdownSeconds)
-  const velocityKmh = Math.round(phase.velocity * 3.6)
+
+  const inCountdown = state.flow.phase === 0 && !state.flow.autoplayComplete
+  const met = useSpooledValue(phase.met, 2800)
+  const velocityKmh = useSpooledValue(phase.velocityMs * 3.6)
+  const distEarth = useSpooledValue(phase.distEarthKm)
+  const distMoon = useSpooledValue(phase.distMoonKm)
+
+  const hint = hintFor(state)
 
   return (
     <div className="hud-root">
-      <div className="hud-scanlines" aria-hidden="true" />
+      <header className="hud-phase">
+        <div className="hud-label">
+          Mission phase {String(state.flow.phase).padStart(2, '0')}
+          <span className="hud-label-dim"> / {String(MAX_PHASE).padStart(2, '0')}</span>
+        </div>
+        <h1 className="hud-phase-name">{phase.name}</h1>
+        <div className="hud-phase-detail">{phase.detail}</div>
+      </header>
 
-      <div className="hud-module hud-status">
-        <div className="hud-label">Phase</div>
-        <div className="hud-value hud-value--lg">{phase.name}</div>
-        <div className="hud-substat">
-          <span className="hud-go-dot" aria-hidden="true" />
-          Step {pad(state.flow.phase, 2)}/{pad(MAX_PHASE, 2)} — Go
+      <div className="hud-clock">
+        <div className="hud-label">Ground elapsed time</div>
+        <div className="hud-clock-value">
+          {inCountdown ? `-000:00:${String(state.countdownSeconds).padStart(2, '0')}` : formatGet(met)}
         </div>
       </div>
 
-      <div className="hud-module hud-clock">
-        <div className="hud-label">Met</div>
-        <div className="hud-value hud-value--lg">
-          {clock.prefix}
-          {clock.text}
+      <dl className="hud-telemetry">
+        <div className="hud-cell">
+          <dt className="hud-label">Velocity</dt>
+          <dd className="hud-value">
+            {Math.round(velocityKmh).toLocaleString('en-US')}
+            <span className="hud-unit"> km/h</span>
+          </dd>
         </div>
+        <div className="hud-cell">
+          <dt className="hud-label">Dist · Earth</dt>
+          <dd className="hud-value">
+            {formatKm(distEarth)}
+            <span className="hud-unit"> km</span>
+          </dd>
+        </div>
+        <div className="hud-cell">
+          <dt className="hud-label">Dist · Moon</dt>
+          <dd className="hud-value">
+            {formatKm(distMoon)}
+            <span className="hud-unit"> km</span>
+          </dd>
+        </div>
+      </dl>
+
+      <div className="hud-hint">
+        {hint.keys && <span className="hud-key">{hint.keys}</span>}
+        <span className="hud-hint-label">{hint.label}</span>
       </div>
 
-      <div className="hud-cluster hud-telemetry">
-        <div className="hud-module">
-          <div className="hud-label">Alt</div>
-          <div className="hud-value">{pad(Math.round(phase.altitude), 4)} km</div>
-        </div>
-        <div className="hud-module">
-          <div className="hud-label">Vel</div>
-          <div className="hud-value">{pad(velocityKmh, 5)} km/h</div>
-        </div>
+      <div className="hud-track" aria-hidden="true">
+        {PHASES.map((p, i) => (
+          <span
+            key={p.id}
+            className={
+              i < state.flow.phase
+                ? 'hud-tick hud-tick--past'
+                : i === state.flow.phase
+                  ? 'hud-tick hud-tick--now'
+                  : 'hud-tick'
+            }
+          />
+        ))}
       </div>
     </div>
   )

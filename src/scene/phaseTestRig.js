@@ -6,10 +6,9 @@
 // (re)triggers the real countdown/liftoff LaunchSequence from T-10, once
 // wired via setLaunchSequence(). Delete this file plus its wiring in
 // SceneManager.js once the real sequences land.
-import { PHASES } from '../data/phases.js'
+import { PHASES, MAX_PHASE } from '../data/phases.js'
 
 const MIN_PHASE = 0
-const MAX_PHASE = 9
 
 export class PhaseTestRig {
   constructor({ flowStore }) {

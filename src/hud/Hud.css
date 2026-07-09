@@ -1,6 +1,7 @@
 /* HUD overlay shell — layout only, no logic/state lives here.
    Sits above the full-viewport Three.js canvas (sibling, position: fixed,
-   inset: 0). Must never block orbit-drag gestures on the canvas below. */
+   inset: 0). pointer-events: none throughout — it must never block canvas
+   orbit-drag / click-to-inspect gestures below. */
 
 .hud-root {
   position: fixed;
@@ -10,98 +11,179 @@
 
   font-family: var(--mc-font-mono);
   color: var(--mc-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Shared small-caps micro label above every reading. */
+.hud-label {
+  font-family: var(--mc-font-sans);
+  font-weight: 400;
+  font-size: 0.66rem;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  color: var(--mc-text-dim);
 }
 
-/* Faint CRT scanline texture over the whole viewport (canvas included).
-   Kept very low-opacity so it reads as texture, not noise. */
-.hud-scanlines {
+.hud-label-dim {
+  color: var(--mc-text-dim);
+  opacity: 0.6;
+}
+
+/* ---- top left: mission phase ------------------------------------------ */
+
+.hud-phase {
   position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.35) 0,
-    rgba(0, 0, 0, 0.35) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-  opacity: 0.05;
-  mix-blend-mode: overlay;
+  top: 1.6rem;
+  left: 1.75rem;
+  max-width: 24rem;
+  padding-left: 0.9rem;
+  border-left: 1px solid var(--mc-hairline-strong);
 }
 
-/* Shared instrument-panel readout: thin amber border over a near-black
-   scrim, small uppercase label above a monospace value. Deliberately
-   square, not a rounded modern card. */
-.hud-module {
-  pointer-events: none;
-  padding: 0.5em 0.9em;
-  background: var(--mc-panel-bg);
-  border: 1px solid var(--mc-amber-dim);
-  font-size: 0.85rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25em;
+.hud-phase-name {
+  margin: 0.3rem 0 0.25rem;
+  font-family: var(--mc-font-sans);
+  font-weight: 200;
+  font-size: 1.7rem;
+  line-height: 1.12;
+  letter-spacing: 0.045em;
+  color: var(--mc-text);
 }
 
-.hud-status {
-  position: absolute;
-  top: 1.25rem;
-  left: 1.25rem;
-  min-width: 12em;
+.hud-phase-detail {
+  font-family: var(--mc-font-sans);
+  font-weight: 300;
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  color: var(--mc-text-mid);
 }
+
+/* ---- top center: GET clock -------------------------------------------- */
 
 .hud-clock {
   position: absolute;
-  top: 1.25rem;
+  top: 1.6rem;
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
-  min-width: 10em;
 }
 
-.hud-cluster.hud-telemetry {
+.hud-clock-value {
+  margin-top: 0.3rem;
+  font-size: 1.35rem;
+  font-weight: 300;
+  letter-spacing: 0.08em;
+  color: var(--mc-amber);
+  /* dark drop first so the readout survives bright scene content
+     (parachute canopies) drifting behind it */
+  text-shadow:
+    0 1px 10px rgba(0, 0, 0, 0.75),
+    var(--mc-glow-sm);
+}
+
+/* ---- bottom left: telemetry ------------------------------------------- */
+
+.hud-telemetry {
   position: absolute;
-  bottom: 1.25rem;
-  left: 1.25rem;
+  bottom: 2.9rem;
+  left: 1.75rem;
+  margin: 0;
   display: flex;
-  flex-direction: row;
-  gap: 0.75rem;
+  gap: 0;
+  background: var(--mc-panel-bg);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--mc-hairline);
 }
 
-.hud-label {
-  color: var(--mc-text-dim);
-  font-size: 0.72em;
-  letter-spacing: 0.12em;
+.hud-cell {
+  padding: 0.65rem 1.1rem 0.6rem;
+  min-width: 8.5rem;
+}
+
+.hud-cell + .hud-cell {
+  border-left: 1px solid var(--mc-hairline);
 }
 
 .hud-value {
+  margin: 0.3rem 0 0;
+  font-size: 1.02rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
   color: var(--mc-amber);
-  font-size: 1.05em;
-  letter-spacing: 0.03em;
   text-shadow: var(--mc-glow-sm);
 }
 
-.hud-value--lg {
-  font-size: 1.3em;
+.hud-unit {
+  font-size: 0.7em;
+  color: var(--mc-text-dim);
+  text-shadow: none;
+  letter-spacing: 0.08em;
 }
 
-.hud-substat {
+/* ---- bottom right: input hint ------------------------------------------ */
+
+.hud-hint {
+  position: absolute;
+  bottom: 2.9rem;
+  right: 1.75rem;
   display: flex;
   align-items: center;
-  gap: 0.45em;
-  font-size: 0.72em;
-  color: var(--mc-green);
-  letter-spacing: 0.1em;
-  text-shadow: var(--mc-glow-sm);
+  gap: 0.6rem;
 }
 
-.hud-go-dot {
-  width: 0.5em;
-  height: 0.5em;
-  border-radius: 50%;
-  background: var(--mc-green);
-  box-shadow: 0 0 4px var(--mc-green);
-  flex: none;
+.hud-key {
+  padding: 0.22em 0.65em;
+  border: 1px solid var(--mc-hairline-strong);
+  border-radius: 2px;
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  color: var(--mc-text-mid);
+  animation: hud-key-pulse 2.6s ease-in-out infinite;
+}
+
+.hud-hint-label {
+  font-family: var(--mc-font-sans);
+  font-weight: 300;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  color: var(--mc-text-mid);
+}
+
+@keyframes hud-key-pulse {
+  0%,
+  100% {
+    border-color: var(--mc-hairline-strong);
+    color: var(--mc-text-mid);
+  }
+  50% {
+    border-color: var(--mc-amber-dim);
+    color: var(--mc-text);
+  }
+}
+
+/* ---- bottom center: phase track ---------------------------------------- */
+
+.hud-track {
+  position: absolute;
+  bottom: 1.35rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+}
+
+.hud-tick {
+  width: 14px;
+  height: 2px;
+  background: rgba(236, 238, 233, 0.16);
+  transition: background 0.5s ease;
+}
+
+.hud-tick--past {
+  background: rgba(236, 238, 233, 0.5);
+}
+
+.hud-tick--now {
+  background: var(--mc-amber);
+  box-shadow: 0 0 8px rgba(255, 182, 72, 0.5);
 }

@@ -132,6 +132,56 @@ export const EXHAUST_PRESETS = {
     spriteScale: [1.7, 3.2],
     smoke: false,
   },
+  // LM Ascent Propulsion System: the smallest bell of the mission — one
+  // fixed hypergolic engine punching the ascent stage off the descent deck.
+  APS_SINGLE: {
+    engineCount: 1,
+    layoutRadius: 0,
+    nozzleRadius: 0.45,
+    plumeLength: 5,
+    flare: 3.2,
+    coreStops: [
+      [0, 'rgba(255,240,226,0.9)'],
+      [0.3, 'rgba(255,198,160,0.55)'],
+      [0.7, 'rgba(255,148,112,0.2)'],
+      [1, 'rgba(220,96,80,0)'],
+    ],
+    glowStops: [
+      [0, 'rgba(255,216,190,0.32)'],
+      [0.5, 'rgba(255,152,120,0.12)'],
+      [1, 'rgba(220,96,80,0)'],
+    ],
+    spriteInner: 'rgba(255,246,234,1)',
+    spriteOuter: 'rgba(255,152,112,0)',
+    spriteScale: [1.3, 2.4],
+    smoke: false,
+  },
+  // Reentry plasma: not an engine at all — a wide incandescent sheath
+  // wrapping the Command Module's heat shield. The choreography anchors it
+  // at the shield and flips the group 180° so the "plume" streams up past
+  // the capsule, opposite the direction of travel.
+  REENTRY_PLASMA: {
+    engineCount: 1,
+    layoutRadius: 0,
+    nozzleRadius: 2.3,
+    plumeLength: 15,
+    flare: 1.7,
+    coreStops: [
+      [0, 'rgba(255,250,236,0.95)'],
+      [0.2, 'rgba(255,196,110,0.7)'],
+      [0.55, 'rgba(255,110,50,0.35)'],
+      [1, 'rgba(150,40,80,0)'],
+    ],
+    glowStops: [
+      [0, 'rgba(255,214,150,0.4)'],
+      [0.5, 'rgba(255,120,60,0.16)'],
+      [1, 'rgba(140,40,90,0)'],
+    ],
+    spriteInner: 'rgba(255,248,230,1)',
+    spriteOuter: 'rgba(255,120,40,0)',
+    spriteScale: [5.5, 7],
+    smoke: false,
+  },
   // Single vacuum J-2 (S-IVB).
   J2_SINGLE: {
     engineCount: 1,

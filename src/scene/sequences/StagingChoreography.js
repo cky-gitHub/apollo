@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { ExhaustSystem, EXHAUST_PRESETS } from '../particles/ExhaustSystem.js'
 import { SeparationFlash } from '../particles/SeparationFlash.js'
+import { Parachutes } from '../rocket/Parachutes.js'
 
 // Powered ascent, staging, and the trans-lunar arc: phases 3-9, from Max-Q
 // through S-IC/S-II staging, TLI, transposition-and-docking, lunar approach,
@@ -39,6 +40,14 @@ const DEBRIS_GRAVITY = 9 // aesthetic world-units/s^2 — spent stages sink, slo
 const DEBRIS_MAX_AGE_SECONDS = 30
 const DEBRIS_MAX_DISTANCE = 1600 // from the rocket; far enough to be sub-pixel
 
+// SLA panel jettison (transposition beat). The four petals hinge open on
+// their base lines to this angle, then the hinges release and spring
+// thrusters fling each panel away tumbling — Apollo 11 jettisoned the
+// panels entirely (they were not left hinged open like on Apollo 7).
+const SLA_OPEN_ANGLE = 50 * DEG
+const SLA_OPEN_SECONDS = 1.05
+const SLA_PANEL_SPEED = 7.5 // m/s radial spring ejection at release
+
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
 }
@@ -64,9 +73,14 @@ function coastThenBurn(knotT, knotP) {
 // camera dark.
 const LIGHT_HOME = [180, 220, 120]
 const LIGHT_SPACE = [500, 1400, 3200]
+// The Pacific recovery zone only exists for phase 13 — every other phase
+// holds it at the splash site with opacity 0 so the reveal is a fade under
+// the descending CM, same pattern as the pre-TLI Earth/Moon.
+const OCEAN_HIDDEN = [2300, 40, 0, 1, 0]
 const ENV_HOME = {
   earth: [-2700, 800, -1500, 1, 0],
   moon: [5200, 2100, -900, 0.28, 0],
+  ocean: OCEAN_HIDDEN,
   light: LIGHT_HOME,
 }
 
@@ -78,8 +92,10 @@ const ENV_HOME = {
 //
 // csm: 'stowed' (riding the stack) | 'docked' (transposed, nose on the LM)
 //      | 'gone' (departed as debris before the descent)
+//      | 'cm' (Command Module alone, home transform, apex up — reentry)
 // lm:  whether the Lunar Module is revealed (it hides inside the SLA
 //      adapter until transposition).
+// chutes: whether the recovery parachutes sit deployed (phase 13 only).
 // env.moon in phase 9 is sized/placed so the sphere's top surface sits
 // exactly under the LM's footpads at the settled pos — the landing site.
 const SETTLED = [
@@ -93,12 +109,12 @@ const SETTLED = [
   {
     pos: [760, 2510, 0], tilt: 70 * DEG, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'docked', lm: true,
-    env: { earth: [-2700, 800, -1500, 1, 1], moon: [5200, 2100, -900, 0.28, 1], light: LIGHT_SPACE },
+    env: { earth: [-2700, 800, -1500, 1, 1], moon: [5200, 2100, -900, 0.28, 1], ocean: OCEAN_HIDDEN, light: LIGHT_SPACE },
   },
   {
     pos: [860, 2560, 0], tilt: 70 * DEG, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'docked', lm: true,
-    env: { earth: [-4300, 300, -2400, 0.55, 1], moon: [2600, 200, -400, 0.95, 1], light: LIGHT_SPACE },
+    env: { earth: [-4300, 300, -2400, 0.55, 1], moon: [2600, 200, -400, 0.95, 1], ocean: OCEAN_HIDDEN, light: LIGHT_SPACE },
   },
   // 9's moon is sized/positioned so its top surface sits exactly under the
   // LM's footpads at the settled pos; the 8->9 lerp path was checked to keep
@@ -106,7 +122,41 @@ const SETTLED = [
   {
     pos: [980, 2080, 0], tilt: 0, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'gone', lm: true,
-    env: { earth: [-400, 4700, -2600, 0.12, 1], moon: [980, -379, 0, 1.7, 1], light: LIGHT_SPACE },
+    env: { earth: [-400, 4700, -2600, 0.12, 1], moon: [980, -379, 0, 1.7, 1], ocean: OCEAN_HIDDEN, light: LIGHT_SPACE },
+  },
+  // 10: Tranquility Base — identical vehicle/env state to touchdown; the
+  // phase exists as a held tableau (camera re-frame + HUD beat), so there is
+  // deliberately no BEATS[10] entry.
+  {
+    pos: [980, 2080, 0], tilt: 0, burn: null, sky: 1, pad: 0, stretch: 1,
+    detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'gone', lm: true,
+    env: { earth: [-400, 4700, -2600, 0.12, 1], moon: [980, -379, 0, 1.7, 1], ocean: OCEAN_HIDDEN, light: LIGHT_SPACE },
+  },
+  // 11: ascent & rendezvous — the ascent stage climbs off the descent-stage
+  // launch pad (abandoned onto the Moon group so it recedes WITH the
+  // terrain), then Columbia rejoins and docks. Settled = docked in orbit.
+  {
+    pos: [1080, 2700, 0], tilt: 62 * DEG, burn: null, sky: 1, pad: 0, stretch: 1,
+    detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB', 'LM-DS'], csm: 'docked', lm: true,
+    env: { earth: [-3900, 2800, -2300, 0.18, 1], moon: [1150, -125, -500, 1.15, 1], ocean: OCEAN_HIDDEN, light: LIGHT_SPACE },
+  },
+  // 12: trans-Earth injection — Eagle's ascent stage jettisoned, SPS burn
+  // for home; the Moon falls behind, Earth swells ahead.
+  {
+    // (pos.y is kept moderate so the 12->13 reentry dive stays within what
+    // the camera chase can hold in frame.)
+    pos: [1500, 1500, 0], tilt: 70 * DEG, burn: null, sky: 1, pad: 0, stretch: 1,
+    detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB', 'LM-DS', 'LM'], csm: 'docked', lm: true,
+    env: { earth: [-3000, 600, -1700, 0.8, 1], moon: [3500, 300, -1300, 0.5, 1], ocean: OCEAN_HIDDEN, light: LIGHT_SPACE },
+  },
+  // 13: reentry & splashdown — SM jettisoned, blunt-end-forward entry, sky
+  // fades back to blue while the ocean fades in; settles bobbing on the
+  // water under deployed mains. pos.y puts the CM's heat shield at the
+  // ocean surface (y=40) given the CM's ~97m stack-local height.
+  {
+    pos: [2300, -58, 0], tilt: 0, burn: null, sky: 0, pad: 0, stretch: 1,
+    detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB', 'LM-DS', 'LM', 'SM'], csm: 'cm', lm: true, chutes: true,
+    env: { earth: [-3000, 600, -1700, 1.1, 0], moon: [3400, 1500, -1300, 0.5, 0], ocean: [2300, 40, 0, 1, 1], light: [2600, 1600, 1000] },
   },
 ]
 
@@ -237,11 +287,13 @@ const BEATS = {
     ],
   },
   // 6 -> 7: TLI cutoff, then transposition & docking while Earth materializes
-  // behind. The long, quiet centerpiece: the SLA cone is discarded to reveal
-  // the LM, the CSM pulls ahead, flips end-over-end, glides back to dock,
-  // and finally the spent S-IVB drifts away below.
+  // behind. The long, quiet centerpiece: the SLA's four petal panels blow
+  // apart and spring away tumbling, exposing the LM on the S-IVB; the CSM
+  // pulls ahead, flips end-over-end, glides back to dock nose-to-nose; and
+  // finally the spent S-IVB (carrying the SLA's fixed aft ring) drifts away
+  // below — the extraction, seen from the LM's side.
   7: {
-    duration: 16.5,
+    duration: 17.5,
     progress: easeInOutCubic,
     // Environment (Earth reveal, sun swing) settles by ~55% so the backdrop
     // is fully in while the docking plays out in front of it.
@@ -256,22 +308,18 @@ const BEATS = {
         },
       },
       { at: 2.0, run: (c) => c._setVibe(0) },
-      { at: 3.2, run: (c) => c._setLmVisible(true) },
       {
-        at: 3.3,
-        run: (c, instant) =>
-          c._separate('SLA', instant, {
-            along: 0.5,
-            back: -8, // slightly forward…
-            radial: 14, // …but mostly sideways, clear of the CSM above it
-            spinRate: 0.9,
-            flashScale: 10,
-            sparkSpeed: 7,
-            gravity: 0,
-          }),
+        at: 2.9,
+        run: (c, instant) => {
+          // Pyro: the joints between the petals sever and the panels start
+          // hinging outward — which is also the moment the LM first shows.
+          c._setLmVisible(true)
+          if (!instant) c._openSlaPanels()
+        },
       },
+      { at: 4.2, run: (c, instant) => c._releaseSlaPanels(instant) },
       {
-        at: 4.6,
+        at: 5.2,
         run: (c, instant) => {
           // CSM pulls ahead of the stack to get room for the flip.
           if (instant) return // dock event applies the final transform
@@ -284,7 +332,7 @@ const BEATS = {
         },
       },
       {
-        at: 7.6,
+        at: 8.2,
         run: (c, instant) => {
           if (instant) return
           const csm = c._jettisonable['CSM']?.object
@@ -295,7 +343,7 @@ const BEATS = {
         },
       },
       {
-        at: 11.4,
+        at: 12.2,
         run: (c, instant) => {
           if (instant) return
           const csm = c._jettisonable['CSM']?.object
@@ -307,7 +355,7 @@ const BEATS = {
         },
       },
       {
-        at: 14.5,
+        at: 15.4,
         run: (c, instant) => {
           // Contact: instant-safe hard dock — snaps whatever the tweens
           // reached to the exact docked transform.
@@ -326,7 +374,7 @@ const BEATS = {
         },
       },
       {
-        at: 15.3,
+        at: 16.3,
         run: (c, instant) =>
           c._separate('S-IVB', instant, {
             along: 0.4,
@@ -421,6 +469,201 @@ const BEATS = {
       },
     ],
   },
+  // 10 -> 11: lunar liftoff and rendezvous. The ascent stage punches off the
+  // descent stage (which stays behind as the launch pad, parented onto the
+  // Moon so it recedes with the terrain), climbs to orbit while the surface
+  // falls away, and Columbia slides in to dock. The environment holds still
+  // for the first third — vertical rise off solid ground — before the Moon
+  // recedes underneath.
+  11: {
+    duration: 18,
+    progress: easeInOutCubic,
+    ease: (t) => easeInOutCubic(Math.max(0, (t - 0.35) / 0.65)),
+    valid: (c) =>
+      c._csmState === 'gone' && !c._detached.has('LM-DS') && !c._detached.has('LM'),
+    events: [
+      {
+        at: 0.6,
+        run: (c, instant) => {
+          c._abandonToMoon('LM-DS', instant)
+          if (c._exhausts['APS']) {
+            c._exhausts['APS'].ignite()
+            c._exhausts['APS'].setStretch(1)
+          }
+          c._setVibe(0.45)
+          if (!instant && c._lmGroup) {
+            const pos = c._lmGroup
+              .getWorldPosition(new THREE.Vector3())
+              .addScaledVector(c._axis(), -(c._lmGroup.userData.bodyLength ?? 4.5) / 2)
+            c.flash.spawnDust(pos, { speed: 7 })
+          }
+        },
+      },
+      {
+        at: 8.6,
+        run: (c) => {
+          c._exhausts['APS']?.extinguish()
+          c._setVibe(0)
+        },
+      },
+      {
+        at: 10.2,
+        run: (c, instant) => {
+          // Columbia rejoins: restored into the stack frame well ahead of
+          // the ascent stage, then closes to just short of contact. The dock
+          // event below is the instant-safe hard set.
+          if (instant) return
+          c._restore('CSM')
+          const csm = c._jettisonable['CSM']?.object
+          if (!csm) return
+          csm.rotation.set(0, 0, Math.PI)
+          const fromY = c._dockLocalY + 46
+          csm.position.y = fromY
+          c._addTween(5.0, (t) => {
+            csm.position.y = THREE.MathUtils.lerp(fromY, c._dockLocalY + 1.2, t)
+          })
+        },
+      },
+      {
+        at: 15.8,
+        run: (c, instant) => {
+          c._restore('CSM')
+          const csm = c._jettisonable['CSM']?.object
+          if (csm) {
+            csm.position.y = c._dockLocalY
+            csm.rotation.set(0, 0, Math.PI)
+          }
+          c._csmState = 'docked'
+          if (!instant && csm) {
+            const pos = csm
+              .getWorldPosition(new THREE.Vector3())
+              .addScaledVector(c._axis(), -(csm.userData.apexOffset ?? 3.5))
+            c.flash.spawn(pos, { scale: 5, sparkSpeed: 3 })
+          }
+        },
+      },
+    ],
+  },
+  // 11 -> 12: trans-Earth injection. Eagle's ascent stage is cast off, a
+  // quiet beat, then the SPS lights for home while the Moon drops away
+  // behind and Earth begins to grow ahead.
+  12: {
+    duration: 12,
+    progress: easeInOutCubic,
+    valid: (c) => c._csmState === 'docked' && c._detached.has('LM-DS') && !c._detached.has('LM'),
+    events: [
+      {
+        at: 0.9,
+        run: (c, instant) =>
+          c._separate('LM', instant, {
+            along: 0.3,
+            back: 7,
+            lateral: 2,
+            spinRate: 0.3,
+            flashScale: 8,
+            sparkSpeed: 5,
+            gravity: 0,
+          }),
+      },
+      {
+        at: 3.0,
+        run: (c, instant) => {
+          c._exhausts['SPS'].ignite()
+          c._exhausts['SPS'].setStretch(1)
+          c._setVibe(0.45)
+          if (!instant) c._igniteFlash('SPS', 8, 5)
+        },
+      },
+      {
+        at: 9.6,
+        run: (c) => {
+          c._exhausts['SPS'].extinguish()
+          c._setVibe(0)
+        },
+      },
+    ],
+  },
+  // 12 -> 13: reentry and splashdown — the finale. The Service Module is
+  // cut loose, the Command Module swings blunt-end forward, hits the
+  // atmosphere in a sheath of plasma while the sky floods back in, then
+  // mains out, and the mission ends bobbing in the Pacific.
+  13: {
+    duration: 26,
+    // Motion completes at 90% so the splash happens on settled water;
+    // orientation/sky/ocean settle earlier (78%) — same pattern as the
+    // lunar touchdown.
+    progress: (t) => easeInOutCubic(Math.min(t / 0.9, 1)),
+    ease: (t) => easeInOutCubic(Math.min(t / 0.78, 1)),
+    valid: (c) => c._csmState === 'docked' && c._detached.has('LM') && !c._detached.has('SM'),
+    events: [
+      {
+        at: 0.8,
+        run: (c, instant) =>
+          c._separate('SM', instant, {
+            along: 0.25,
+            back: 6,
+            lateral: 1.5,
+            spinRate: 0.4,
+            flashScale: 8,
+            sparkSpeed: 5,
+            gravity: 0,
+            maxAge: 14,
+          }),
+      },
+      {
+        at: 2.4,
+        run: (c, instant) => {
+          // Blunt-end forward: unwind the transposition flip and settle the
+          // body back to its home (apex-up) transform for the descent.
+          if (instant) return
+          const csm = c._jettisonable['CSM']?.object
+          if (!csm) return
+          const fromY = csm.position.y
+          const homeY = c._jettisonable['CSM'].position.y
+          c._addTween(3.2, (t) => {
+            csm.rotation.z = Math.PI * (1 - t)
+            csm.position.y = THREE.MathUtils.lerp(fromY, homeY, t)
+          })
+        },
+      },
+      {
+        at: 6.4,
+        run: (c) => {
+          c._exhausts['PLASMA']?.ignite()
+          c._exhausts['PLASMA']?.setStretch(1)
+          c._setVibe(1.15)
+        },
+      },
+      { at: 13.8, run: (c) => c._exhausts['PLASMA']?.setStretch(0.35) },
+      {
+        at: 15.4,
+        run: (c) => {
+          c._exhausts['PLASMA']?.extinguish()
+          c._setVibe(0.25)
+        },
+      },
+      {
+        at: 17.0,
+        run: (c, instant) => {
+          if (instant) return // settled chutes flag applies the final state
+          c._addTween(2.6, (t) => c._parachutes?.setProgress(t))
+        },
+      },
+      {
+        at: 23.2,
+        run: (c, instant) => {
+          c._setVibe(0)
+          if (instant) return
+          const csm = c._jettisonable['CSM']?.object
+          if (!csm) return
+          const pos = csm
+            .getWorldPosition(new THREE.Vector3())
+            .addScaledVector(c._axis(), -(csm.userData.apexOffset ?? 3.5))
+          c.flash.spawnDust(pos, { speed: 14 })
+        },
+      },
+    ],
+  },
 }
 
 const LAUNCH_DRIVING_STAGES = new Set(['countdown', 'ignitionHold', 'liftoff'])
@@ -438,6 +681,7 @@ export class StagingChoreography {
     launchPad,
     earth,
     moon,
+    ocean,
     keyLight,
   }) {
     this.flowStore = flowStore
@@ -450,6 +694,7 @@ export class StagingChoreography {
     this.launchPad = launchPad
     this.earth = earth
     this.moon = moon
+    this.ocean = ocean
     this.keyLight = keyLight
 
     this.flash = new SeparationFlash(scene)
@@ -487,6 +732,39 @@ export class StagingChoreography {
         EXHAUST_PRESETS.DPS_SINGLE,
       )
     }
+    const lmAscent = rocket.getObjectByName('LM-Ascent')
+    if (lmAscent) {
+      this._exhausts.APS = new ExhaustSystem(
+        lmAscent,
+        (lmAscent.userData.engineOffsetY ?? 2.4),
+        EXHAUST_PRESETS.APS_SINGLE,
+      )
+    }
+    // Reentry plasma sheath: anchored at the CM's heat shield and flipped
+    // 180° so the incandescent wake streams up past the capsule, opposite
+    // the direction of travel. Offsets measured while the stack still sits
+    // assembled at the pad (world y == rocket-local y), like _dockLocalY.
+    const cmGroup = rocket.getObjectByName('CM')
+    if (csmBody && cmGroup) {
+      rocket.updateWorldMatrix(true, true)
+      const cmBottomY = new THREE.Box3().setFromObject(cmGroup).min.y
+      const pivotY = csmBody.getWorldPosition(new THREE.Vector3()).y
+      this._exhausts.PLASMA = new ExhaustSystem(
+        csmBody,
+        cmBottomY - pivotY + 0.25,
+        EXHAUST_PRESETS.REENTRY_PLASMA,
+      )
+      this._exhausts.PLASMA.group.rotation.z = Math.PI
+    }
+
+    // Recovery mains ride the CM's apex; hidden until the reentry beat
+    // (or the phase-13 settled chutes flag) deploys them.
+    this._parachutes = null
+    if (csmBody) {
+      this._parachutes = new Parachutes()
+      this._parachutes.group.position.y = (csmBody.userData.apexOffset ?? 3.5) - 0.2
+      csmBody.add(this._parachutes.group)
+    }
 
     // Everything that can leave the stack, with its home attachment +
     // transform so any jump/inspect round-trip can rebuild the full vehicle.
@@ -496,6 +774,28 @@ export class StagingChoreography {
     if (lesGroup) this._storeHome('LES', lesGroup)
     this._storeHome('SLA', rocket.getObjectByName('CSM-SLA-Adapter'))
     if (csmBody) this._storeHome('CSM', csmBody)
+    // The SLA's four petal hinge groups (see RocketAssembly.createSlaAssembly).
+    // 'SLA' stays a single jettisonable id, but the petals leave the group as
+    // individual debris at release — their homes are kept here so
+    // _restore('SLA') can rebuild the closed cone.
+    this._slaPetals = []
+    this._slaTweens = []
+    const slaGroup = this._jettisonable['SLA']?.object
+    slaGroup?.children.forEach((child) => {
+      if (!child.name.startsWith('SLA-Panel')) return
+      this._slaPetals.push({
+        object: child,
+        parent: child.parent,
+        position: child.position.clone(),
+        quaternion: child.quaternion.clone(),
+        scale: child.scale.clone(),
+      })
+    })
+    // Return-journey hardware: the LM's stages part ways at lunar liftoff,
+    // the whole (ascent-only) LM group goes before TEI, the SM at entry.
+    if (this._lmGroup) this._storeHome('LM', this._lmGroup)
+    this._storeHome('LM-DS', rocket.getObjectByName('LM-Descent'))
+    this._storeHome('SM', rocket.getObjectByName('SM'))
 
     // Docked transform for the transposed CSM (local to its stage group):
     // rotated 180°, positioned so the CM apex kisses the LM's docking hatch.
@@ -625,7 +925,7 @@ export class StagingChoreography {
   // transposition-beat reveal. Lets inspection hide labels/exploded slots
   // for hardware that isn't actually there anymore.
   isStagePresent(id) {
-    if (id === 'LM') return this._lmGroup?.visible ?? false
+    if (id === 'LM') return (this._lmGroup?.visible ?? false) && !this._detached.has('LM')
     return !this._detached.has(id)
   }
 
@@ -690,9 +990,10 @@ export class StagingChoreography {
   }
 
   _applyEnvNow() {
-    const { earth, moon, light } = this._envNow
+    const { earth, moon, ocean, light } = this._envNow
     this.earth?.apply(...earth)
     this.moon?.apply(...moon)
+    this.ocean?.apply(...ocean)
     this.keyLight?.position.set(...light)
   }
 
@@ -703,7 +1004,9 @@ export class StagingChoreography {
   // 0-1; _flushTweens() jumps everything to its end state so beats can be
   // fast-forwarded safely.
   _addTween(duration, apply) {
-    this._tweens.push({ elapsed: 0, duration, apply })
+    const tween = { elapsed: 0, duration, apply }
+    this._tweens.push(tween)
+    return tween
   }
 
   _flushTweens() {
@@ -739,7 +1042,9 @@ export class StagingChoreography {
     })
 
     // CSM layout: stowed rides the stack, docked is flipped nose-onto-LM,
-    // gone means it has already departed before the descent.
+    // gone means it has already departed before the descent, cm is the
+    // Command Module alone at its home (apex-up) transform for reentry —
+    // the SM itself is handled by the detached list above.
     if (this._jettisonable.CSM) {
       if (target.csm === 'gone') {
         this._detachInstant('CSM')
@@ -754,6 +1059,7 @@ export class StagingChoreography {
     }
     this._csmState = target.csm
     this._setLmVisible(target.lm)
+    this._parachutes?.setDeployed(target.chutes ?? false)
 
     Object.entries(this._exhausts).forEach(([id, exhaust]) => {
       if (id === target.burn) {
@@ -786,6 +1092,97 @@ export class StagingChoreography {
     if (this._lmGroup) this._lmGroup.visible = visible
   }
 
+  // Lunar liftoff: the descent stage stays behind as the launch pad. It is
+  // parented onto the MOON group (not scene-attached debris), so when the
+  // env channel shrinks/moves the Moon during the climb to orbit, the stage
+  // recedes with the terrain it is standing on instead of levitating.
+  _abandonToMoon(id, instant) {
+    if (this._detached.has(id)) return
+    const entry = this._jettisonable[id]
+    if (!entry) return
+    this._detached.add(id)
+    if (instant || !this.moon) entry.object.removeFromParent()
+    else this.moon.group.attach(entry.object)
+  }
+
+  // SLA pyro fires: the four petals start hinging outward on spring
+  // thrusters. Purely visual — the discrete "SLA is gone" fact belongs to
+  // _releaseSlaPanels, which is the instant-safe half of the pair.
+  _openSlaPanels() {
+    const entry = this._jettisonable['SLA']
+    if (!entry || this._detached.has('SLA')) return
+
+    this._slaTweens = this._slaPetals.map((petal) => {
+      const hinge = petal.object
+      const axis = hinge.userData.hingeAxis
+      // Extra ease-out on top of the tween's cubic: pyros pop, springs bleed.
+      return this._addTween(SLA_OPEN_SECONDS, (t) => {
+        const punched = 1 - (1 - t) ** 2
+        hinge.quaternion.setFromAxisAngle(axis, SLA_OPEN_ANGLE * punched)
+      })
+    })
+
+    const panelHeight = entry.object.userData.panelHeight ?? 3.4
+    const pos = entry.object
+      .getWorldPosition(new THREE.Vector3())
+      .addScaledVector(this._axis(), panelHeight * 0.6)
+    this.flash.spawn(pos, { scale: 11, sparkSpeed: 7 })
+  }
+
+  // Spring release: at the open angle the hinges let go and each petal
+  // leaves as free tumbling debris — on Apollo 11 the panels were jettisoned
+  // entirely, not left hinged open. Fast-forwarding (instant) just removes
+  // the closed cone; _restore('SLA') rebuilds it petal by petal.
+  _releaseSlaPanels(instant) {
+    if (this._detached.has('SLA')) return
+    const entry = this._jettisonable['SLA']
+    if (!entry) return
+    this._detached.add('SLA')
+
+    // Drop any still-running open tweens — the release pose is set exactly.
+    this._tweens = this._tweens.filter((tween) => !this._slaTweens.includes(tween))
+    this._slaTweens = []
+
+    if (instant) {
+      this._resetSlaPetals()
+      entry.object.removeFromParent()
+      return
+    }
+
+    const axisWorld = this._axis()
+    for (const petal of this._slaPetals) {
+      const hinge = petal.object
+      hinge.quaternion.setFromAxisAngle(hinge.userData.hingeAxis, SLA_OPEN_ANGLE)
+      this.scene.attach(hinge)
+      const outward = hinge.userData.outward.clone().applyQuaternion(this.rocket.quaternion)
+      const spinAxis = hinge.userData.hingeAxis.clone().applyQuaternion(this.rocket.quaternion)
+      this._debris.push({
+        object: hinge,
+        velocity: this._rocketVel
+          .clone()
+          .multiplyScalar(0.4)
+          .addScaledVector(outward, SLA_PANEL_SPEED * (0.9 + Math.random() * 0.2))
+          .addScaledVector(axisWorld, 2.2), // slight forward drift, clear of the S-IVB
+        spinAxis,
+        spinRate: 0.55 * (0.85 + Math.random() * 0.3), // keeps tumbling the way it opened
+        gravity: 0,
+        maxAge: DEBRIS_MAX_AGE_SECONDS,
+        age: 0,
+      })
+    }
+    entry.object.removeFromParent() // now-empty shell group
+  }
+
+  _resetSlaPetals() {
+    for (const petal of this._slaPetals) {
+      this._debris = this._debris.filter((debris) => debris.object !== petal.object)
+      petal.parent.add(petal.object)
+      petal.object.position.copy(petal.position)
+      petal.object.quaternion.copy(petal.quaternion)
+      petal.object.scale.copy(petal.scale)
+    }
+  }
+
   _separate(id, instant, opts) {
     if (this._detached.has(id)) return
     const entry = this._jettisonable[id]
@@ -806,10 +1203,12 @@ export class StagingChoreography {
     const halfAlong =
       (size.x * Math.abs(axis.x) + size.y * Math.abs(axis.y) + size.z * Math.abs(axis.z)) / 2
 
-    const flashPos = opts.flashAtTop
-      ? center.clone().addScaledVector(axis, halfAlong)
-      : center.clone()
-    this.flash.spawn(flashPos, { scale: opts.flashScale, sparkSpeed: opts.sparkSpeed })
+    if (opts.flashScale > 0) {
+      const flashPos = opts.flashAtTop
+        ? center.clone().addScaledVector(axis, halfAlong)
+        : center.clone()
+      this.flash.spawn(flashPos, { scale: opts.flashScale, sparkSpeed: opts.sparkSpeed })
+    }
 
     const velocity = this._rocketVel
       .clone()
@@ -842,6 +1241,7 @@ export class StagingChoreography {
       spinAxis,
       spinRate: opts.spinRate * (0.8 + Math.random() * 0.4),
       gravity: opts.gravity ?? DEBRIS_GRAVITY,
+      maxAge: opts.maxAge ?? DEBRIS_MAX_AGE_SECONDS,
       age: 0,
     })
   }
@@ -856,12 +1256,17 @@ export class StagingChoreography {
   _restore(id) {
     const entry = this._jettisonable[id]
     if (!entry) return
+    // If it's still flying as debris (e.g. Columbia rejoining at the
+    // rendezvous), reclaim it from the debris list first.
+    this._debris = this._debris.filter((debris) => debris.object !== entry.object)
     entry.parent.add(entry.object)
     entry.object.position.copy(entry.position)
     entry.object.quaternion.copy(entry.quaternion)
     entry.object.scale.copy(entry.scale)
     entry.object.visible = true
     this._detached.delete(id)
+    // The SLA's petals leave the group as individual debris — put them back.
+    if (id === 'SLA') this._resetSlaPetals()
   }
 
   _clearDebris() {
@@ -903,6 +1308,7 @@ export class StagingChoreography {
     if (this._mode === 'inspect') return
 
     this._time += dt
+    this._parachutes?.update(dt)
     this._updateDebris(dt)
     this._updateTweens(dt)
 
@@ -976,7 +1382,7 @@ export class StagingChoreography {
       debris.object.rotateOnWorldAxis(debris.spinAxis, debris.spinRate * dt)
 
       const distance = debris.object.position.distanceTo(this.rocket.position)
-      if (debris.age > DEBRIS_MAX_AGE_SECONDS || distance > DEBRIS_MAX_DISTANCE) {
+      if (debris.age > debris.maxAge || distance > DEBRIS_MAX_DISTANCE) {
         debris.object.removeFromParent()
         this._debris.splice(i, 1)
       }

@@ -45,6 +45,20 @@ export const CAMERA_PHASES = [
   // 9: powered descent / touchdown — close orbit on the LM, slightly high
   // so the surface rising to meet it stays in frame
   { frame: 'rocket', focusHeight: 93, position: [20, 8, 34], target: [0, -3, 0], duration: 3400, orbitSpeed: 0.05 },
+  // 10: Tranquility Base — low tableau, but kept a few meters ABOVE the
+  // sphere's grazing curvature (the surface top sits ~focus+81; a camera at
+  // focus-1 ends up underground and the Moon front-face culls away)
+  { frame: 'rocket', focusHeight: 90, position: [21, 7, 34], target: [0, 0, 0], duration: 3800, orbitSpeed: 0.045 },
+  // 11: lunar liftoff & rendezvous — under the ascent stage looking up, so
+  // the climb reads and Columbia's approach comes down through frame
+  { frame: 'rocket', focusHeight: 90, position: [26, -8, 52], target: [0, 7, 0], duration: 3200, orbitSpeed: 0.02 },
+  // 12: trans-Earth injection — trailing the CSM, aimed past it toward the
+  // Earth growing ahead (env keeps Earth at -X)
+  { frame: 'rocket', focusHeight: 99, position: [44, 12, 52], target: [0, -2, 0], duration: 3000, orbitSpeed: 0.015 },
+  // 13: reentry & splashdown — on the capsule with pose shake armed (the
+  // choreography's vibe gain turns it into plasma buffeting), aimed a touch
+  // high so the deployed mains stay inside the frame at the end
+  { frame: 'rocket', focusHeight: 97, position: [27, 3, 50], target: [0, 9, 0], shake: 0.5, duration: 3400, orbitSpeed: 0.03 },
 ]
 
 export const DEFAULT_TRANSITION_DURATION = 1200
@@ -65,8 +79,11 @@ const _spherical = new THREE.Spherical()
 const POLE_EPSILON = 0.05 // rad of slack kept from the poles so orbiting straight up/down never flips the camera
 
 // Rotates `offset` (a vector from some fixed focus point) by azimuth (around
-// +Y) and polar (tilt toward/away from +Y) deltas, in place.
-function orbitOffset(offset, azimuth, polar) {
+// +Y) and polar (tilt toward/away from +Y) deltas, in place. Exported so
+// SceneManager can apply the same free-look math to inspect mode's
+// OrbitControls-driven camera (which this module's pose pipeline doesn't
+// touch — see FreeLookControl's inspect-mode branch).
+export function orbitOffset(offset, azimuth, polar) {
   if (!azimuth && !polar) return offset
   _spherical.setFromVector3(offset)
   _spherical.theta += azimuth

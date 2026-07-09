@@ -13,6 +13,12 @@ const TOP_BODY_BOTTOM_NAME = 'SM Body, Bottom'
 // adapter cone below the CSM.
 const LM_SCALE = 0.9
 const LM_STOWED_CLEARANCE = 0.3 // above the adapter's bottom lip
+// The LM GLB is a flat list of ~134 baked-transform meshes with no
+// stage-level grouping. A horizontal cut in model space partitions them:
+// descent stage (octagonal box, legs, porch/ladder) sits below y=2.5,
+// ascent stage (crew cabin, APS, antennas) above — verified against the
+// node bounds. The lunar-liftoff beat jettisons 'LM-Descent' as a unit.
+const LM_STAGE_CUT_Y = 2.5
 
 // The imported GLB is authored as a few major Saturn V assemblies rather than
 // already-separated mission stages. Interstages/adapters travel with the lower
@@ -113,6 +119,46 @@ function groupLesAssembly(topRoot) {
   lesNodes.forEach((node) => les.attach(node))
 }
 
+// Splits the CSM into 'CM' and 'SM' groups so reentry can jettison the
+// Service Module and fly the Command Module home alone. Most part nodes
+// carry a CM/SM name prefix; the rest (Aft Frames, EPS radiators, hatches,
+// umbilical…) are classified geometrically against the aft heat shield's
+// bottom — everything above the CM's blunt end is CM. Runs on the raw
+// unscaled model, before the FEET_TO_METERS scale and stack positioning.
+function splitCommandServiceModules(topRoot) {
+  // The part nodes are siblings under one dense hub node ("Root" in the
+  // Sketchfab export) — find it structurally rather than by name.
+  let hub = topRoot
+  topRoot.traverse((object) => {
+    if (object.children.length > hub.children.length) hub = object
+  })
+
+  topRoot.updateWorldMatrix(true, true)
+  const shield = findObjectByLooseName(topRoot, 'Ht Shld-Aft Abl')
+  const cutY = shield
+    ? new THREE.Box3().setFromObject(shield).min.y + 0.05
+    : 0
+
+  const cm = new THREE.Group()
+  cm.name = 'CM'
+  const sm = new THREE.Group()
+  sm.name = 'SM'
+
+  const box = new THREE.Box3()
+  ;[...hub.children].forEach((child) => {
+    if (child.name === 'LES' || child.name.startsWith('LES-')) return
+    let bucket
+    if (/^CM[\s-]/.test(child.name)) bucket = cm
+    else if (/^SM[\s-]/.test(child.name)) bucket = sm
+    else {
+      box.setFromObject(child)
+      bucket = (box.min.y + box.max.y) / 2 >= cutY ? cm : sm
+    }
+    bucket.add(child) // identity groups in the same frame — transforms hold
+  })
+  hub.add(cm, sm)
+}
+
 function tuneTopMaterials(root) {
   root.traverse((object) => {
     if (!object.isMesh) return
@@ -132,19 +178,109 @@ function radiusForNamedObject(root, objectName, fallbackRadius) {
   return boxRadius(new THREE.Box3().setFromObject(object))
 }
 
-function createTopAdapter(bottomRadius, topRadius) {
-  const adapter = new THREE.Mesh(
-    new THREE.CylinderGeometry(topRadius, bottomRadius, TOP_ADAPTER_HEIGHT, 64, 1, true),
-    new THREE.MeshStandardMaterial({
-      color: 0xdeddd6,
-      metalness: 0.05,
-      roughness: 0.72,
-      side: THREE.DoubleSide,
-    }),
+// Plain fuselage-white shell, shared by the SLA pieces and the interstage
+// fillers below — a tapered (or straight, if radii match) tube the height of
+// the gap it's plugging.
+function createShellMaterial() {
+  return new THREE.MeshStandardMaterial({
+    color: 0xdeddd6,
+    metalness: 0.05,
+    roughness: 0.72,
+    side: THREE.DoubleSide,
+  })
+}
+
+function createTaperedShell(topRadius, bottomRadius, height) {
+  return new THREE.Mesh(
+    new THREE.CylinderGeometry(topRadius, bottomRadius, height, 64, 1, true),
+    createShellMaterial(),
   )
-  adapter.name = 'CSM-SLA-Adapter'
-  adapter.userData.stageId = 'CSM'
-  return adapter
+}
+
+// Spacecraft-LM Adapter. Two parts, mirroring the real hardware:
+//  - 'SLA-Ring': the fixed aft section, bolted to the Instrument Unit. The
+//    caller attaches it to the S-IVB stage group so it departs WITH the
+//    S-IVB after the LM is extracted, exactly like the real adapter's aft
+//    panels did.
+//  - 'CSM-SLA-Adapter': the four forward petal panels. On Apollo 11 these
+//    were fully JETTISONED at transposition — pyros severed the longitudinal
+//    joints, the panels hinged outward on their base lines, and spring
+//    thrusters flung them clear, tumbling. Each petal mesh therefore lives
+//    inside an 'SLA-Panel-i' hinge group whose origin sits ON its hinge line
+//    (the panel's base-edge midpoint), so the choreography can drive the
+//    open-and-release purely by rotating/attaching the hinge group.
+//    userData on each hinge: hingeAxis (unit tangent — rotating about +axis
+//    tips the panel top outward) and outward (unit radial), in stack-local
+//    space. userData.panelHeight on the group anchors the pyro flash.
+const SLA_RING_FRACTION = 0.28 // aft fixed section, as fraction of SLA height
+const SLA_PANEL_GAP = 0.012 // rad seam between adjacent petals — the pyro joint lines
+
+function createSlaAssembly(bottomRadius, topRadius) {
+  const ringHeight = TOP_ADAPTER_HEIGHT * SLA_RING_FRACTION
+  const panelHeight = TOP_ADAPTER_HEIGHT - ringHeight
+  const ringTopRadius = THREE.MathUtils.lerp(bottomRadius, topRadius, SLA_RING_FRACTION)
+
+  const ring = createTaperedShell(ringTopRadius, bottomRadius, ringHeight)
+  ring.name = 'SLA-Ring'
+
+  const panels = new THREE.Group()
+  panels.name = 'CSM-SLA-Adapter'
+  panels.userData.stageId = 'CSM'
+  panels.userData.panelHeight = panelHeight
+
+  const thetaLength = Math.PI / 2 - 2 * SLA_PANEL_GAP
+  for (let i = 0; i < 4; i += 1) {
+    const thetaCenter = i * (Math.PI / 2) + Math.PI / 4
+    // CylinderGeometry convention: x = r·sin(θ), z = r·cos(θ).
+    const outward = new THREE.Vector3(Math.sin(thetaCenter), 0, Math.cos(thetaCenter))
+    const hingeAxis = new THREE.Vector3(Math.cos(thetaCenter), 0, -Math.sin(thetaCenter))
+
+    const geometry = new THREE.CylinderGeometry(
+      topRadius,
+      ringTopRadius,
+      panelHeight,
+      24,
+      1,
+      true,
+      thetaCenter - Math.PI / 4 + SLA_PANEL_GAP,
+      thetaLength,
+    )
+    geometry.translate(0, panelHeight / 2, 0) // base at y=0, the hinge plane
+
+    const hinge = new THREE.Group()
+    hinge.name = `SLA-Panel-${i}`
+    hinge.position.copy(outward).multiplyScalar(ringTopRadius)
+    hinge.userData.hingeAxis = hingeAxis
+    hinge.userData.outward = outward
+
+    const mesh = new THREE.Mesh(geometry, createShellMaterial())
+    mesh.position.copy(outward).multiplyScalar(-ringTopRadius) // cone axis back to stack center
+    hinge.add(mesh)
+    panels.add(hinge)
+  }
+
+  return { ring, panels, ringHeight }
+}
+
+// The source GLB's S-IC/S-II and S-II/S-IVB interstages are open/lattice-
+// like where they meet the next stage up — accurate-looking close in, but
+// from a normal viewing distance the opening reads as a gap with the tank
+// dome behind it visible through it, even though the two stages' bounding
+// boxes actually overlap. A plain shell spanning that measured overlap
+// hides the opening; it's added to (and travels with) the LOWER stage, same
+// as the real interstage would after separation.
+function addInterstageFiller(lowerGroup, upperGroup) {
+  const lowerTop = lowerGroup.userData.modelBounds.max[1]
+  const upperBottom = upperGroup.userData.modelBounds.min[1]
+  const height = lowerTop - upperBottom
+  if (height <= 0) return // bounds don't actually overlap -- nothing to bridge
+
+  const lowerRadius = STAGE_SPECS[lowerGroup.userData.stageId].diameter / 2
+  const upperRadius = STAGE_SPECS[upperGroup.userData.stageId].diameter / 2
+  const filler = createTaperedShell(upperRadius, lowerRadius, height)
+  filler.name = `${lowerGroup.name}-${upperGroup.name}-Filler`
+  filler.position.y = (lowerTop + upperBottom) / 2 - lowerGroup.position.y
+  lowerGroup.add(filler)
 }
 
 function centerStageGroup(group) {
@@ -187,6 +323,7 @@ function addTopAssembly({ rocket, stageGroups, topGltf }) {
   topRoot.name = 'CSM-LES'
   pruneTopReferenceObjects(topRoot)
   groupLesAssembly(topRoot)
+  splitCommandServiceModules(topRoot)
   tuneTopMaterials(topRoot)
   topRoot.scale.setScalar(FEET_TO_METERS)
   topRoot.updateWorldMatrix(true, true)
@@ -205,11 +342,23 @@ function addTopAssembly({ rocket, stageGroups, topGltf }) {
   const bottomRadius = radiusForNamedObject(rocket, 'Instrument_Unit', topRadius)
 
   const topStage = createStageGroup(STAGE_SPECS.CSM)
-  const adapter = createTopAdapter(bottomRadius, topRadius)
-  adapter.position.y = lowerTopY + TOP_ADAPTER_HEIGHT / 2
+  const { ring, panels, ringHeight } = createSlaAssembly(bottomRadius, topRadius)
+
+  // The fixed aft ring rides the S-IVB stage group (positioned in its local
+  // frame), so it leaves with the S-IVB after LM extraction; the petals ride
+  // the CSM stage group until the transposition beat blows them off.
+  const sivbGroup = stageGroups.get('S-IVB')
+  if (sivbGroup) {
+    ring.position.y = lowerTopY + ringHeight / 2 - sivbGroup.position.y
+    sivbGroup.add(ring)
+  } else {
+    ring.position.y = lowerTopY + ringHeight / 2
+    topStage.add(ring)
+  }
+  panels.position.y = lowerTopY + ringHeight
 
   topRoot.position.y = adapterTopY - bodyBottomY
-  topStage.add(adapter)
+  topStage.add(panels)
   topStage.add(topRoot)
 
   // Pivot group for the transposition maneuver: 'CSM-Body' wraps the CSM
@@ -233,6 +382,36 @@ function addTopAssembly({ rocket, stageGroups, topGltf }) {
   stageGroups.set('CSM', topStage)
 }
 
+// Partitions the LM's flat mesh list into 'LM-Descent' / 'LM-Ascent' groups
+// by each mesh's bounds center against LM_STAGE_CUT_Y (model space, before
+// the LM_SCALE is applied). engineOffsetY on the ascent group anchors the
+// APS exhaust for the lunar-liftoff beat, in the same lmRoot-local units.
+function splitLunarModuleStages(lmRoot) {
+  // The mesh list sits under a single wrapper node ("lunarlande"), not
+  // directly under the scene — find the dense hub and partition ITS children.
+  let hub = lmRoot
+  lmRoot.traverse((object) => {
+    if (object.children.length > hub.children.length) hub = object
+  })
+
+  lmRoot.updateWorldMatrix(true, true)
+  const ascent = new THREE.Group()
+  ascent.name = 'LM-Ascent'
+  const descent = new THREE.Group()
+  descent.name = 'LM-Descent'
+
+  const box = new THREE.Box3()
+  ;[...hub.children].forEach((child) => {
+    box.setFromObject(child)
+    const centerY = (box.min.y + box.max.y) / 2
+    ;(centerY >= LM_STAGE_CUT_Y ? ascent : descent).add(child)
+  })
+  hub.add(descent, ascent)
+
+  box.setFromObject(ascent)
+  ascent.userData.engineOffsetY = box.min.y + 0.1
+}
+
 // Adds the Lunar Module stowed inside the SLA adapter, invisible until the
 // transposition-and-docking beat reveals it. Registered as a stage group
 // (before CSM, matching stack order) so inspection explode/isolate includes
@@ -245,6 +424,7 @@ function addLunarModule({ rocket, stageGroups, lmGltf }) {
 
   const lmRoot = lmGltf.scene
   lmRoot.name = 'LM-Model'
+  splitLunarModuleStages(lmRoot)
   lmRoot.scale.setScalar(LM_SCALE)
   lmRoot.updateWorldMatrix(true, true)
 
@@ -252,7 +432,10 @@ function addLunarModule({ rocket, stageGroups, lmGltf }) {
   lmGroup.add(lmRoot)
 
   rocket.updateWorldMatrix(true, true)
-  const adapterBottomY = new THREE.Box3().setFromObject(adapter).min.y
+  // The LM rests just above the SLA's AFT end — the fixed ring, which now
+  // lives on the S-IVB stage group — not the (higher) petal-panel base.
+  const slaBottomRef = rocket.getObjectByName('SLA-Ring') ?? adapter
+  const adapterBottomY = new THREE.Box3().setFromObject(slaBottomRef).min.y
   const lmBox = new THREE.Box3().setFromObject(lmRoot)
   lmRoot.position.y = adapterBottomY + LM_STOWED_CLEARANCE - lmBox.min.y
 
@@ -306,6 +489,13 @@ function buildModelRocketStack(gltf, topGltf, lmGltf) {
 
   if (stageGroups.size === 0) {
     throw new Error('Saturn V model did not contain any expected stage groups.')
+  }
+
+  if (stageGroups.has('S-IC') && stageGroups.has('S-II')) {
+    addInterstageFiller(stageGroups.get('S-IC'), stageGroups.get('S-II'))
+  }
+  if (stageGroups.has('S-II') && stageGroups.has('S-IVB')) {
+    addInterstageFiller(stageGroups.get('S-II'), stageGroups.get('S-IVB'))
   }
 
   addTopAssembly({ rocket, stageGroups, topGltf })

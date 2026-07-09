@@ -125,8 +125,14 @@ export class InspectionController {
     return present.length > 0 ? present : all
   }
 
+  // Index used for explode spacing: among PRESENT stages only, so a
+  // jettisoned stage's slot collapses instead of leaving a gap sized for
+  // hardware that isn't there anymore (matters mid-flight; with the full
+  // stack present this is identical to stack order).
   _explodedY(stageId) {
-    const index = [...this.stageGroups.keys()].indexOf(stageId)
+    const presentIds = this._presentStageIds()
+    const compactIndex = presentIds.indexOf(stageId)
+    const index = compactIndex !== -1 ? compactIndex : [...this.stageGroups.keys()].indexOf(stageId)
     return this._stackY.get(stageId) + index * EXPLODE_GAP
   }
 
@@ -310,22 +316,43 @@ export class InspectionController {
 
     this.stageGroups.forEach((group, stageId) => {
       const el = this._labelElements.get(stageId)
-      if (!group.visible) {
+      const line = this._leaderLines.get(stageId)
+      const dot = this._anchorDots.get(stageId)
+      const hide = () => {
         el.style.display = 'none'
+        line.style.display = 'none'
+        dot.style.display = 'none'
+      }
+
+      if (!group.visible) {
+        hide()
         return
       }
       group.getWorldPosition(worldPos)
       worldPos.project(this.camera)
 
       if (worldPos.z > 1) {
-        el.style.display = 'none'
+        hide()
         return
       }
 
-      const x = (worldPos.x * 0.5 + 0.5) * clientWidth
-      const y = (1 - (worldPos.y * 0.5 + 0.5)) * clientHeight
+      const anchorX = (worldPos.x * 0.5 + 0.5) * clientWidth
+      const anchorY = (1 - (worldPos.y * 0.5 + 0.5)) * clientHeight
+      const labelX = anchorX + LABEL_OFFSET_X
+      const labelY = anchorY + LABEL_OFFSET_Y
+
       el.style.display = 'block'
-      el.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`
+      el.style.transform = `translate(8px, -50%) translate(${labelX}px, ${labelY}px)`
+
+      line.style.display = ''
+      line.setAttribute('x1', anchorX)
+      line.setAttribute('y1', anchorY)
+      line.setAttribute('x2', labelX)
+      line.setAttribute('y2', labelY)
+
+      dot.style.display = ''
+      dot.setAttribute('cx', anchorX)
+      dot.setAttribute('cy', anchorY)
     })
   }
 
@@ -336,5 +363,6 @@ export class InspectionController {
     window.removeEventListener('keydown', this._onKeyDown)
     this.controls.dispose()
     this._labelElements.forEach((el) => el.remove())
+    this._svg.remove()
   }
 }

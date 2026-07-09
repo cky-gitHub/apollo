@@ -38,9 +38,9 @@ Reference spec data (diameters, lengths, engine counts/types, labels) lives in s
 
 \- CSM: 3.9m diameter, \~11m length, 1x SPS engine, centered
 
-\- LM: \~4.3m diameter (legs extended), \~7m length, 1x descent engine, centered. Loaded from public/models/lunar module.glb (NASA Apollo LM model, Draco-decoded, WebP textures) at 0.9 scale, stowed invisible inside the SLA adapter until the phase-7 transposition beat reveals it. It IS a stage group ('LM', ordered between S-IVB and CSM) so inspection explode/isolate includes it.
+\- LM: \~4.3m diameter (legs extended), \~7m length, 1x descent engine, centered. Loaded from public/models/lunar module.glb (NASA Apollo LM model, Draco-decoded, WebP textures) at 0.9 scale, stowed invisible inside the SLA adapter until the phase-7 transposition beat reveals it. It IS a stage group ('LM', ordered between S-IVB and CSM) so inspection explode/isolate includes it. At load its flat mesh list is partitioned into 'LM-Descent' / 'LM-Ascent' groups by bounds-center against a y=2.5 cut in model space (RocketAssembly.splitLunarModuleStages — the meshes sit under one dense hub node, find it structurally); the lunar-liftoff beat jettisons 'LM-Descent' as a unit and the ascent group's userData.engineOffsetY anchors the APS exhaust.
 
-\- Inside the CSM stage group, the CSM proper is wrapped in a 'CSM-Body' pivot group whose origin is the body center — the transposition flip is a plain rotation.z of that group. Its userData carries apexOffset (pivot->CM apex, for dock math) and engineOffsetY (SPS bell anchor). The SLA adapter mesh ('CSM-SLA-Adapter') jettisons separately.
+\- Inside the CSM stage group, the CSM proper is wrapped in a 'CSM-Body' pivot group whose origin is the body center — the transposition flip is a plain rotation.z of that group. Its userData carries apexOffset (pivot->CM apex, for dock math) and engineOffsetY (SPS bell anchor). The SLA adapter mesh ('CSM-SLA-Adapter') jettisons separately. The CSM model is also split at load into 'CM' / 'SM' groups (splitCommandServiceModules): name prefix where present, geometric fallback against the aft heat shield's bottom — reentry jettisons 'SM' and flies the CM home alone. The recovery Parachutes (procedural, rocket/Parachutes.js — the GLB's chute node is degenerate) ride inside CSM-Body at apexOffset.
 
 
 
@@ -48,7 +48,7 @@ Reference spec data (diameters, lengths, engine counts/types, labels) lives in s
 
 mode: 'flow' | 'inspect'
 
-flow.phase: 0-9 (int, discrete steps, not continuous scroll mapping)
+flow.phase: 0-13 (int, discrete steps, not continuous scroll mapping). MAX\_PHASE is exported from src/data/phases.js — never hardcode it. phases.js also carries the real Apollo 11 telemetry anchors (met = GET seconds, distEarthKm, distMoonKm, velocityMs, detail) that the HUD spools between; keep those roughly true to the mission, they are not decorative.
 
 flow.autoplayComplete: boolean
 
@@ -82,9 +82,17 @@ Owns the rocket transform for phases >= 3 and whenever a beat/glide runs. Rules:
 
 \- The LES tower is grouped at load into an 'LES' group inside the top assembly (RocketAssembly) and jettisons during the phase-5 beat.
 
-\- Phases 7-9 (T\&D -> lunar approach -> LM descent) are fully choreographed. Discrete per-phase facts beyond `detached`: `csm` ('stowed' | 'docked' | 'gone') and `lm` (revealed or not). The docked CSM transform is position.y = \_dockLocalY (computed at construction from the LM box + apexOffset), rotation.z = PI. Beat 9's touchdown events assume motion completes at 86% of the beat (custom progress) and orientation/environment settle at 78%, so contact happens on settled ground.
+\- Phases 7-13 (T\&D -> lunar approach -> LM descent -> Tranquility Base -> ascent/rendezvous -> TEI -> reentry/splashdown) are fully choreographed. Discrete per-phase facts beyond `detached`: `csm` ('stowed' | 'docked' | 'gone' | 'cm' — CM alone at its home apex-up transform for reentry), `lm` (revealed or not), and `chutes` (phase-13 settled mains). The docked CSM transform is position.y = \_dockLocalY (computed at construction from the LM box + apexOffset), rotation.z = PI — the lunar rendezvous dock reuses exactly this transform. Beats 9 and 13 assume motion completes at 86%/90% of the beat (custom progress) and orientation/environment settle at 78%, so contact happens on settled ground/water.
 
-\- Environment staging: Earth/Moon positions+scales+opacity and the key light (sun) position are per-phase data in SETTLED\[i].env, lerped through the same continuous channel as the rocket transform (\_applyContinuous). Phases <= 6 hold the bodies at their phase-7 entry marks with opacity 0 so the reveal is a fade, never a sweep. LIGHT\_SPACE points the sun +Z-ish for phases 7+ so both discs show a terminator. Phase 9's Moon is sized/placed so the sphere's TOP surface sits exactly under the LM footpads at the settled pos — the Moon sphere IS the landing terrain (no separate patch; a tiled canvas-noise bump map carries close-range detail). The 8->9 moon lerp path was chosen to keep that surface below the descending vehicle the whole way — don't move those env numbers without re-checking clearance.
+\- Phase 10 deliberately has NO beat: it's a held tableau (same settled state as 9), so a 9->10 step is purely a camera re-frame + HUD beat via \_snapTo's glide.
+
+\- Lunar liftoff (beat 11) abandons 'LM-DS' via \_abandonToMoon — parented onto the MOON group, not scene debris, so when the env channel shrinks/moves the Moon the stage recedes with the terrain it stands on. Its beat `ease` holds the environment still for the first 35% (vertical rise off solid ground). \_restore() reclaims objects from the debris list first, which is how Columbia comes back as a live object after departing as debris in beat 9.
+
+\- Reentry plasma is an ExhaustSystem (REENTRY\_PLASMA preset) anchored at the CM heat shield with its group rotated PI so the wake streams up past the capsule. \_separate accepts `maxAge` (debris cleanup override) and skips the pyro flash when `flashScale <= 0`.
+
+\- Camera gotcha for surface phases: the Moon-sphere ground at the landing site sits \~focus+81 in rocket-frame terms; a pose whose camera y lands below that grazing curvature ends up underground and the front-face-culled Moon vanishes (phase 10's pose keeps +7).
+
+\- Environment staging: Earth/Moon/Ocean positions+scales+opacity and the key light (sun) position are per-phase data in SETTLED\[i].env, lerped through the same continuous channel as the rocket transform (\_applyContinuous). The Ocean (environment/Ocean.js, splashdown water) follows the same apply() contract and stays at the splash site with opacity 0 until phase 13; its disc carries renderOrder -1 like the pad, for the same transparent-pass reason. Phases <= 6 hold the bodies at their phase-7 entry marks with opacity 0 so the reveal is a fade, never a sweep. LIGHT\_SPACE points the sun +Z-ish for phases 7+ so both discs show a terminator. Phase 9's Moon is sized/placed so the sphere's TOP surface sits exactly under the LM footpads at the settled pos — the Moon sphere IS the landing terrain (no separate patch; a tiled canvas-noise bump map carries close-range detail). The 8->9 moon lerp path was chosen to keep that surface below the descending vehicle the whole way — don't move those env numbers without re-checking clearance.
 
 \- Beats can start per-object tweens via c.\_addTween(duration, applyFn) (used for the CSM pull-ahead/flip/return). Tween-starting events must be instant-safe: skip the tween when `instant` and let a later event (the dock at 14.5) hard-set the final transform. \_flushTweens() runs on finishBeat/snapTo.
 

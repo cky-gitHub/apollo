@@ -1,5 +1,6 @@
+import { MAX_PHASE } from '../data/phases.js'
+
 const STEP_COOLDOWN_MS = 400 // lockout after a step fires, so held/repeated keydowns advance one phase at a time
-const MAX_PHASE = 9
 
 // Space-bar -> flow.phase driver. Per the skill, only active when
 // mode === 'flow' && flow.autoplayComplete === true (no space-stepping during
