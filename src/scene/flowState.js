@@ -6,11 +6,11 @@ export function createFlowState() {
   return {
     mode: 'flow', // 'flow' | 'inspect'
     flow: {
-      phase: 0, // 0-9, discrete step
-      // TEMP: defaults true so space-stepper works immediately for testing,
-      // before the countdown/liftoff sequence exists to flip it for real.
-      // Flip this back to false once that sequence lands.
-      autoplayComplete: true,
+      phase: 0, // 0-13, discrete step
+      // False until the real T-10 countdown (LaunchSequence, auto-started by
+      // SceneManager.init()) ticks down and flips it — see MissionAutoplay,
+      // which then carries phases 1-13 the rest of the way by itself.
+      autoplayComplete: false,
     },
     inspect: {
       stage: 'stack', // 'stack' | 'exploded' | { isolated: stageId }

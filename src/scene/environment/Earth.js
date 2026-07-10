@@ -49,7 +49,10 @@ export class Earth {
 
     const texture = new THREE.TextureLoader().load(EARTH_TEXTURE_URL)
     texture.colorSpace = THREE.SRGBColorSpace
-    texture.anisotropy = 4
+    // High anisotropy: during ascent (phases 3-6) the camera skims low over the
+    // globe and reads the surface at grazing angles, where the 2k map smears
+    // without it.
+    texture.anisotropy = 16
 
     this._surfaceMaterial = new THREE.MeshStandardMaterial({
       map: texture,

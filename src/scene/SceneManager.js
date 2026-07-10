@@ -14,10 +14,12 @@ import { buildLaunchPad } from './environment/LaunchPad.js'
 import { SkyEnvironment } from './environment/Sky.js'
 import { Earth } from './environment/Earth.js'
 import { Moon } from './environment/Moon.js'
+import { Sun } from './environment/Sun.js'
 import { Ocean } from './environment/Ocean.js'
 import { ExhaustSystem, EXHAUST_PRESETS } from './particles/ExhaustSystem.js'
 import { LaunchSequence } from './sequences/LaunchSequence.js'
 import { StagingChoreography } from './sequences/StagingChoreography.js'
+import { MissionAutoplay } from './sequences/MissionAutoplay.js'
 
 // Exponential smoothing rate for the camera chasing its resolved pose. High
 // enough to feel locked-on, low enough that vehicle accelerations (staging
@@ -85,8 +87,12 @@ export class SceneManager {
     this.keyLight.position.set(180, 220, 120)
     this.scene.add(this.keyLight)
 
-    // Dim ambient fill so shadowed faces aren't pure black.
-    this.fillLight = new THREE.HemisphereLight(0x8fa8c9, 0x141414, 0.35)
+    // Ambient fill so shadowed faces aren't pure black. Sky term is cool
+    // (blue earthshine/atmosphere), ground term a warm regolith gray so the
+    // lit lunar surface reads as bouncing light up onto the LM's shadow side
+    // when the Sun is low and in front (phases 9-10). Kept modest so the
+    // coast terminators and pad shadows stay crisp.
+    this.fillLight = new THREE.HemisphereLight(0x8fa8c9, 0x3a3128, 0.5)
     this.scene.add(this.fillLight)
 
     this.sky = new SkyEnvironment(this.scene)
@@ -97,6 +103,9 @@ export class SceneManager {
     // them from phase 7 on.
     this.earth = new Earth(this.scene)
     this.moon = new Moon(this.scene)
+    // The visible Sun — locked to keyLight's direction every frame, so what
+    // you see IS what lights the Earth and Moon.
+    this.sun = new Sun(this.scene)
     // Pacific recovery zone, hidden until the reentry beat fades it in.
     this.ocean = new Ocean(this.scene)
 
@@ -106,6 +115,7 @@ export class SceneManager {
     this.exhaust = null
     this.launchSequence = null
     this.choreography = null
+    this.missionAutoplay = null
 
     this._labelContainer = document.createElement('div')
     this._labelContainer.style.position = 'absolute'
@@ -218,6 +228,25 @@ export class SceneManager {
       keyLight: this.keyLight,
     })
     this.inspection.setChoreography(this.choreography)
+
+    this.missionAutoplay = new MissionAutoplay({
+      flowStore: this.flowStore,
+      sceneManager: this,
+      launchSequence: this.launchSequence,
+    })
+
+    // Kick off the real T-10 countdown -> ignition -> liftoff cinematic —
+    // previously only the dev test-rig's 'L' key did this, so the shipped
+    // experience fell through to StagingChoreography's generic 0.9s glide
+    // between phases 0-2 instead of the tuned sequence (visibly "too fast").
+    // MissionAutoplay takes over automatically once liftoff settles.
+    this.launchSequence.start()
+  }
+
+  // Whether the camera is mid-blend between two phase poses — used by
+  // MissionAutoplay so it never advances mid-transition.
+  get cameraTransitioning() {
+    return this._cameraTransition !== null
   }
 
   start() {
@@ -381,10 +410,14 @@ export class SceneManager {
     // rocket transform.
     this.launchSequence?.update(now)
     this.choreography?.update(dt)
+    this.missionAutoplay?.update(dt)
     if (this.mode !== 'inspect') this._updateCamera(dt)
 
     this.exhaust?.update(dt)
     this.sky.followCamera(this.camera.position)
+    // Sun rides the camera at infinity, aimed along the key light, and fades
+    // in with the stars as the atmosphere thins out.
+    this.sun.update(this.camera, this.keyLight, this.sky.dome.material.uniforms.uAltitudeFactor.value)
 
     this.renderer.render(this.scene, this.camera)
   }
@@ -406,6 +439,7 @@ export class SceneManager {
     this.inspection?.dispose()
     this.launchSequence?.dispose()
     this.choreography?.dispose()
+    this.missionAutoplay?.dispose()
     this.spaceStepper.dispose()
     this.freeLook.dispose()
     this.testRig.dispose() // TEMP: test rig — remove before ship

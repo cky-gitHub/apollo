@@ -68,11 +68,24 @@ function coastThenBurn(knotT, knotP) {
 // Environment staging per phase: Earth/Moon [x, y, z, scale, opacity] and
 // the key light's position (sun direction). Pre-TLI phases keep the bodies
 // at their phase-7 entry marks with opacity 0, so the reveal is a fade,
-// never a sweep across the frame. LIGHT_SPACE swings the sun toward +Z for
-// the space phases so both discs show a terminator instead of facing the
-// camera dark.
+// never a sweep across the frame.
+//
+// The key light IS the visible Sun (environment/Sun.js locks the disc to
+// this vector every frame), so the light direction has to read as a real sun
+// you can find in the sky:
+//  - LIGHT_SPACE lights the coast phases from up and to the camera side, so
+//    Earth/Moon show a clear gibbous terminator (legibly lit from one place)
+//    while the hero vehicle stays bright. The disc itself sits off-frame,
+//    behind the shoulder — which is exactly why a near-full Earth reads as
+//    sunlit rather than flat.
+//  - LIGHT_SURFACE (phases 9-10) drops the Sun low in front, just over the
+//    lunar horizon: the disc is in frame, the regolith rakes into long
+//    shadows, and the LM throws a shadow toward the camera — the iconic
+//    Tranquility Base light. The vehicle goes side/back-lit, so the fill
+//    (SceneManager.fillLight) is lifted to keep it readable.
 const LIGHT_HOME = [180, 220, 120]
-const LIGHT_SPACE = [500, 1400, 3200]
+const LIGHT_SPACE = [1600, 1700, 2500]
+const LIGHT_SURFACE = [-880, 60, -3280]
 // The Pacific recovery zone only exists for phase 13 — every other phase
 // holds it at the splash site with opacity 0 so the reveal is a fade under
 // the descending CM, same pattern as the pre-TLI Earth/Moon.
@@ -82,6 +95,30 @@ const ENV_HOME = {
   moon: [5200, 2100, -900, 0.28, 0],
   ocean: OCEAN_HIDDEN,
   light: LIGHT_HOME,
+}
+
+// The Moon stays hidden at its phase-7 entry mark all through ascent (fades in
+// only at TLI); reuse ENV_HOME's moon so the pre-reveal position matches.
+const MOON_HIDDEN = ENV_HOME.moon
+
+// Ascent Earth path (phases 3-6): the planet you launched from, revealed as a
+// huge curved backdrop the vehicle climbs away from, then receding to the
+// phase-7 marble — ONE continuous pull-back from pad to orbit instead of the
+// old "globe pops in at phase 7." The ascent cameras look UP the stack, so
+// each Earth center is placed below-and-behind that shot's view axis (pitched
+// ~45° down, distance growing each phase) to sit in frame as a shrinking limb.
+// These world positions were solved against the settled camera of each phase;
+// they lead directly into SETTLED[7].env.earth. Phases 0-2 hold Earth at the
+// far ENV_HOME mark (opacity 0) so the 2->3 Max-Q beat fades+swells it in
+// rather than sweeping it across. Don't nudge a number without re-checking
+// that the camera stays OUTSIDE the sphere (radius 1800) through the beat into
+// it — inside the sphere the front-face-culled Earth vanishes.
+const ascentEnv = (earth) => ({ earth, moon: MOON_HIDDEN, ocean: OCEAN_HIDDEN, light: LIGHT_HOME })
+const ENV_ASCENT = {
+  3: ascentEnv([-607, -752, -1315, 1, 1]),
+  4: ascentEnv([-747, -530, -1089, 1, 1]),
+  5: ascentEnv([-502, -576, -1291, 1, 1]),
+  6: ascentEnv([-1048, 402, -2574, 1, 1]),
 }
 
 // Settled flight state per phase. pos is the rocket group origin (base of
@@ -102,10 +139,10 @@ const SETTLED = [
   { pos: [0, 0, 0], tilt: 0, burn: null, sky: 0, pad: 1, stretch: 1, detached: [], csm: 'stowed', lm: false, env: ENV_HOME },
   { pos: [0, 0, 0], tilt: 0, burn: 'S-IC', sky: 0, pad: 1, stretch: 1, detached: [], csm: 'stowed', lm: false, env: ENV_HOME },
   { pos: [0, 35, 0], tilt: 0, burn: 'S-IC', sky: 0.35, pad: 1, stretch: 1.35, detached: [], csm: 'stowed', lm: false, env: ENV_HOME },
-  { pos: [24, 420, 0], tilt: 12 * DEG, burn: 'S-IC', sky: 0.62, pad: 0.65, stretch: 2.0, detached: [], csm: 'stowed', lm: false, env: ENV_HOME },
-  { pos: [110, 950, 0], tilt: 27 * DEG, burn: 'S-II', sky: 0.85, pad: 0, stretch: 1.5, detached: ['S-IC'], csm: 'stowed', lm: false, env: ENV_HOME },
-  { pos: [300, 1550, 0], tilt: 45 * DEG, burn: 'S-II', sky: 1, pad: 0, stretch: 1.8, detached: ['S-IC', 'LES'], csm: 'stowed', lm: false, env: ENV_HOME },
-  { pos: [560, 2150, 0], tilt: 63 * DEG, burn: 'S-IVB', sky: 1, pad: 0, stretch: 1.7, detached: ['S-IC', 'LES', 'S-II'], csm: 'stowed', lm: false, env: ENV_HOME },
+  { pos: [24, 420, 0], tilt: 12 * DEG, burn: 'S-IC', sky: 0.62, pad: 0, stretch: 2.0, detached: [], csm: 'stowed', lm: false, env: ENV_ASCENT[3] },
+  { pos: [110, 950, 0], tilt: 27 * DEG, burn: 'S-II', sky: 0.85, pad: 0, stretch: 1.5, detached: ['S-IC'], csm: 'stowed', lm: false, env: ENV_ASCENT[4] },
+  { pos: [300, 1550, 0], tilt: 45 * DEG, burn: 'S-II', sky: 1, pad: 0, stretch: 1.8, detached: ['S-IC', 'LES'], csm: 'stowed', lm: false, env: ENV_ASCENT[5] },
+  { pos: [560, 2150, 0], tilt: 63 * DEG, burn: 'S-IVB', sky: 1, pad: 0, stretch: 1.7, detached: ['S-IC', 'LES', 'S-II'], csm: 'stowed', lm: false, env: ENV_ASCENT[6] },
   {
     pos: [760, 2510, 0], tilt: 70 * DEG, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'docked', lm: true,
@@ -122,7 +159,7 @@ const SETTLED = [
   {
     pos: [980, 2080, 0], tilt: 0, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'gone', lm: true,
-    env: { earth: [-400, 4700, -2600, 0.12, 1], moon: [980, -379, 0, 1.7, 1], ocean: OCEAN_HIDDEN, light: LIGHT_SPACE },
+    env: { earth: [-400, 4700, -2600, 0.12, 1], moon: [980, -379, 0, 1.7, 1], ocean: OCEAN_HIDDEN, light: LIGHT_SURFACE },
   },
   // 10: Tranquility Base — identical vehicle/env state to touchdown; the
   // phase exists as a held tableau (camera re-frame + HUD beat), so there is
@@ -130,7 +167,7 @@ const SETTLED = [
   {
     pos: [980, 2080, 0], tilt: 0, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'gone', lm: true,
-    env: { earth: [-400, 4700, -2600, 0.12, 1], moon: [980, -379, 0, 1.7, 1], ocean: OCEAN_HIDDEN, light: LIGHT_SPACE },
+    env: { earth: [-400, 4700, -2600, 0.12, 1], moon: [980, -379, 0, 1.7, 1], ocean: OCEAN_HIDDEN, light: LIGHT_SURFACE },
   },
   // 11: ascent & rendezvous — the ascent stage climbs off the descent-stage
   // launch pad (abandoned onto the Moon group so it recedes WITH the
@@ -286,17 +323,19 @@ const BEATS = {
       },
     ],
   },
-  // 6 -> 7: TLI cutoff, then transposition & docking while Earth materializes
-  // behind. The long, quiet centerpiece: the SLA's four petal panels blow
-  // apart and spring away tumbling, exposing the LM on the S-IVB; the CSM
-  // pulls ahead, flips end-over-end, glides back to dock nose-to-nose; and
-  // finally the spent S-IVB (carrying the SLA's fixed aft ring) drifts away
-  // below — the extraction, seen from the LM's side.
+  // 6 -> 7: TLI cutoff, then transposition & docking. The Earth (already in
+  // frame since ascent) settles back from the receding limb into its cruise
+  // marble while the Moon fades in behind. The long, quiet centerpiece: the
+  // SLA's four petal panels blow apart and spring away tumbling, exposing the
+  // LM on the S-IVB; the CSM pulls ahead, flips end-over-end, glides back to
+  // dock nose-to-nose; and finally the spent S-IVB (carrying the SLA's fixed
+  // aft ring) drifts away below — the extraction, seen from the LM's side.
   7: {
     duration: 17.5,
     progress: easeInOutCubic,
-    // Environment (Earth reveal, sun swing) settles by ~55% so the backdrop
-    // is fully in while the docking plays out in front of it.
+    // Environment (Earth settling to its marble, Moon fade-in, sun swing)
+    // settles by ~55% so the backdrop is fully in while the docking plays out
+    // in front of it.
     ease: (t) => easeInOutCubic(Math.min(t / 0.55, 1)),
     valid: (c) => !c._detached.has('S-IVB') && c._csmState === 'stowed',
     events: [
@@ -929,6 +968,13 @@ export class StagingChoreography {
     return !this._detached.has(id)
   }
 
+  // Whether the current phase's beat/glide/tweens have all finished — used
+  // by MissionAutoplay to know it's safe to step to the next phase without
+  // cutting the current one short.
+  isSettled() {
+    return !this._beat && !this._glide && this._tweens.length === 0
+  }
+
   // ---------------------------------------------------------------- beats
 
   _startBeat(phase, spec) {
@@ -971,7 +1017,12 @@ export class StagingChoreography {
     )
     this._flightTilt = THREE.MathUtils.lerp(from.tilt, to.tilt, easeT)
     this.skyEnvironment.setAltitudeFactor(THREE.MathUtils.lerp(from.sky, to.sky, easeT))
-    this._setPadOpacity(THREE.MathUtils.lerp(from.pad, to.pad, easeT))
+    // Front-load the pad fade: it must be gone by ~40% of the 2->3 Max-Q beat,
+    // BEFORE the ascent Earth swells in, or the fading flat pad terrain reads
+    // as a translucent shelf cutting across the curved globe. Only the pad
+    // channel is accelerated; everything else keeps the beat's easing.
+    const padT = Math.min(1, easeT / 0.4)
+    this._setPadOpacity(THREE.MathUtils.lerp(from.pad, to.pad, padT))
 
     const now = this._envNow
     for (const key of Object.keys(now)) {
@@ -1342,6 +1393,16 @@ export class StagingChoreography {
       if (t >= 1) this._glide = null
     } else if (this._phase >= 3) {
       owns = true // settled high-phase state: keep vibration alive
+    } else {
+      // Phases 0-2 with no beat/glide active: LaunchSequence is writing
+      // rocket.position directly (pad hold, then the liftoff rise). Mirror
+      // our own continuous state to match every frame, so whenever a beat
+      // or glide DOES take over (the 2->3 handoff), _captureContinuous()
+      // starts from where the rocket actually is instead of the stale
+      // (0,0,0) this was constructed with — otherwise the rocket would snap
+      // back down to the pad for a frame before climbing again.
+      this._flightPos.copy(this.rocket.position)
+      this._prevFlightPos.copy(this.rocket.position)
     }
 
     if (owns) this._writeRocketTransform(dt)

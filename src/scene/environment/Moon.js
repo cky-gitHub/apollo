@@ -32,7 +32,7 @@ function mulberry32(seed) {
 // wrap-around copies at the edges so the tiling has no seams. At the
 // phase-9/10 repeat density this puts ~10 m to ~150 m craters around the LM,
 // which is what sells the surface once the descent gets close.
-function buildCraterBumpTexture(size = 1024, craterCount = 240) {
+function buildCraterBumpTexture(size = 1024, craterCount = 380) {
   const random = mulberry32(19690720)
   const canvas = document.createElement('canvas')
   canvas.width = size
@@ -54,10 +54,11 @@ function buildCraterBumpTexture(size = 1024, craterCount = 240) {
 
   const drawCrater = (x, y, r, k) => {
     const bowl = ctx.createRadialGradient(x, y, 0, x, y, r)
-    bowl.addColorStop(0, `rgba(0,0,0,${0.8 * k})`)
-    bowl.addColorStop(0.58, `rgba(40,40,40,${0.55 * k})`)
-    bowl.addColorStop(0.7, 'rgba(128,128,128,0)')
-    bowl.addColorStop(0.8, `rgba(255,255,255,${0.7 * k})`)
+    bowl.addColorStop(0, `rgba(0,0,0,${0.9 * k})`)
+    bowl.addColorStop(0.55, `rgba(30,30,30,${0.65 * k})`)
+    bowl.addColorStop(0.72, 'rgba(128,128,128,0)')
+    bowl.addColorStop(0.82, `rgba(255,255,255,${0.85 * k})`)
+    bowl.addColorStop(0.95, `rgba(200,200,200,${0.2 * k})`)
     bowl.addColorStop(1, 'rgba(128,128,128,0)')
     ctx.fillStyle = bowl
     ctx.beginPath()
@@ -68,8 +69,8 @@ function buildCraterBumpTexture(size = 1024, craterCount = 240) {
   for (let i = 0; i < craterCount; i += 1) {
     // Power-law sizes: many small, few large; large ones drawn first.
     const t = i / craterCount
-    const r = 5 + 65 * (1 - t) ** 2.6 * (0.6 + random() * 0.4)
-    const k = 0.35 + random() * 0.5
+    const r = 4 + 65 * (1 - t) ** 2.6 * (0.6 + random() * 0.4)
+    const k = 0.5 + random() * 0.5
     const x = random() * size
     const y = random() * size
     for (const dx of [-size, 0, size]) {
@@ -85,6 +86,7 @@ function buildCraterBumpTexture(size = 1024, craterCount = 240) {
   texture.wrapS = THREE.RepeatWrapping
   texture.wrapT = THREE.RepeatWrapping
   texture.repeat.set(16, 8)
+  texture.anisotropy = 8 // surface phases view the ground at grazing angles
   return texture
 }
 
@@ -102,7 +104,7 @@ export class Moon {
     this._material = new THREE.MeshStandardMaterial({
       map: texture,
       bumpMap: buildCraterBumpTexture(),
-      bumpScale: 3.2,
+      bumpScale: 5.5,
       roughness: 1,
       metalness: 0,
       transparent: true,
