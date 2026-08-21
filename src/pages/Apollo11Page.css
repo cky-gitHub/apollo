@@ -1,0 +1,125 @@
+.apollo11-split {
+  display: grid;
+  grid-template-columns: minmax(300px, 44%) 1fr;
+  gap: clamp(2rem, 4vw, 4rem);
+  padding: 3.5rem 0;
+  border-bottom: 1px solid var(--site-hairline);
+}
+
+.apollo11-viewer-col {
+  position: sticky;
+  top: calc(var(--site-nav-height) + 2rem);
+  height: min(60vh, 560px);
+  align-self: start;
+}
+
+.crew-card {
+  padding: 1.4rem 0;
+  border-top: 1px solid var(--site-hairline);
+}
+
+.crew-card:last-child {
+  padding-bottom: 0;
+}
+
+.crew-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.crew-card-header h3 {
+  margin: 0;
+  font-family: var(--site-font-display);
+  font-weight: 500;
+  font-size: 1.25rem;
+  color: var(--site-text);
+}
+
+.crew-card p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: var(--site-text-mid);
+}
+
+.apollo11-section {
+  padding: 3.5rem 0;
+  border-bottom: 1px solid var(--site-hairline);
+}
+
+.apollo11-section--last {
+  border-bottom: none;
+  padding-bottom: 6rem;
+}
+
+.apollo11-section .section-heading {
+  margin-bottom: 1.1rem;
+}
+
+.mission-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--site-hairline);
+}
+
+.mission-timeline-item {
+  display: grid;
+  grid-template-columns: 11rem 1fr;
+  gap: 1.5rem;
+  padding: 1.4rem 0;
+  border-bottom: 1px solid var(--site-hairline);
+}
+
+.mission-timeline-get {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-family: var(--site-font-mono);
+  font-size: 0.92rem;
+  color: var(--site-accent-text);
+  letter-spacing: 0.02em;
+}
+
+.mission-timeline-date {
+  font-size: 0.7rem;
+  color: var(--site-text-dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mission-timeline-body h3 {
+  margin: 0 0 0.35rem;
+  font-family: var(--site-font-display);
+  font-weight: 500;
+  font-size: 1.1rem;
+  color: var(--site-text);
+}
+
+.mission-timeline-body p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--site-text-mid);
+}
+
+@media (max-width: 900px) {
+  .apollo11-split {
+    grid-template-columns: 1fr;
+  }
+
+  .apollo11-viewer-col {
+    position: static;
+    height: 380px;
+  }
+}
+
+@media (max-width: 640px) {
+  .mission-timeline-item {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+}

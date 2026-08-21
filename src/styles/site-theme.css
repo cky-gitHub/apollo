@@ -1,0 +1,49 @@
+/* Site design tokens — the editorial shell that wraps the 3D hero.
+   Deliberately its OWN identity, distinct from theme.css's mission-control
+   instrument language (amber glow, mono readouts): this is premium
+   aerospace-editorial, closer to a design monograph than a HUD. Black +
+   warm off-white + one restrained metallic accent, nothing else.
+
+   Font pairing:
+   - Display: Fraunces (variable). A serif with real editorial gravitas —
+     high-contrast strokes and a slightly humanist, almost wet-ink warmth at
+     large sizes, without tipping into pastiche "NASA retro" or generic
+     corporate-sans anonymity. Its optical-size axis sharpens automatically
+     at small sizes, so it stays legible as sub-heads and pull-quotes get
+     smaller.
+   - Body: Inter Variable. Chosen for pure legibility at long-form reading
+     sizes and because it's already loaded for the HUD/labels — reusing it
+     keeps one fewer typeface in the payload and gives the site a quiet
+     structural echo of the instrument panel without ever borrowing its
+     amber/mono treatment.
+   - Data accents (mission stats, dates, coordinates): JetBrains Mono, used
+     sparingly — the one deliberate wink back at the HUD's telemetry, only
+     on numbers that are genuinely readings (GET clocks, distances). */
+
+:root {
+  --site-bg: #07080a;
+  --site-bg-raised: #0e1013;
+  --site-bg-card: #101317;
+  --site-hairline: rgba(244, 242, 236, 0.1);
+  --site-hairline-strong: rgba(244, 242, 236, 0.22);
+
+  --site-text: #f4f2ec;
+  --site-text-mid: rgba(244, 242, 236, 0.7);
+  --site-text-dim: rgba(244, 242, 236, 0.46);
+
+  /* muted brass/copper — heat-shield and gold-foil warmth, distinct from
+     the HUD's saturated instrument amber (--mc-amber) */
+  --site-accent: #c68b52;
+  --site-accent-soft: rgba(198, 139, 82, 0.32);
+  --site-accent-text: #e0ab77;
+
+  --site-font-display: 'Fraunces Variable', 'Fraunces', Georgia, 'Times New Roman', serif;
+  --site-font-body: 'Inter Variable', 'Inter', system-ui, 'Segoe UI', sans-serif;
+  --site-font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+
+  --site-max-width: 1180px;
+  --site-gutter: clamp(1.25rem, 4vw, 4.5rem);
+  --site-nav-height: 4.75rem;
+
+  --site-radius: 3px;
+}

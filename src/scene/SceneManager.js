@@ -27,12 +27,6 @@ import { MissionAutoplay } from './sequences/MissionAutoplay.js'
 const CAMERA_FOLLOW_LAMBDA = 7
 const SHAKE_GAIN_LAMBDA = 4
 
-// Camera offset for entering inspect mode, added to the current stack's
-// world-space focus point (inspection.getFocusWorldPosition() — NOT a fixed
-// pad spot, since inspection no longer repositions the vehicle: it freezes
-// wherever the mission currently is).
-const INSPECT_CAMERA_OFFSET = new THREE.Vector3(92, 36, 228)
-
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
 }
@@ -48,16 +42,18 @@ export class SceneManager {
     // in src/styles/theme.css at its darkest so canvas and page chrome still
     // read as one continuous surface once at altitude.
 
+    // Far plane covers the ground-Earth's visible limb during ascent (a
+    // 40k-radius sphere seen from ~2.5k up puts the horizon ~13k away — see
+    // missionSpace.js); everything farther is compressed inside ~7k anyway.
     this.camera = new THREE.PerspectiveCamera(
       50,
       container.clientWidth / container.clientHeight,
       0.1,
-      10000,
+      30000,
     )
 
     this.currentPhase = 0
     this._cameraTransition = null
-    this._autoOrbitAngle = 0
     this._manualAzimuth = 0
     this._manualPolar = 0
     this._shakeGain = 0
@@ -155,12 +151,16 @@ export class SceneManager {
         if (previousMode === 'inspect' && state.mode === 'flow') {
           this._reengageCameraFromInspect()
         } else if (state.mode === 'inspect') {
-          const focus = this.inspection.getFocusWorldPosition()
-          const camPos = focus.clone().addScaledVector(INSPECT_CAMERA_OFFSET, this.inspection.getFramingScale())
-          this.camera.position.copy(camPos)
-          this.camera.lookAt(focus)
-          this._camPos.copy(camPos)
-          this._camTarget.copy(focus)
+          // Inspection freezes the view exactly where it stands — no camera
+          // jump. OrbitControls takes over from the current pose (position
+          // re-copied from _camPos to strip any live shake offset) and orbits
+          // around the shot's current look-target; the exploded layout is
+          // centered on the stack (inspection._explodedY), so it unfolds in
+          // place within this framing.
+          this._cameraTransition = null
+          this.camera.position.copy(this._camPos)
+          this.camera.lookAt(this._camTarget)
+          this.inspection.controls.target.copy(this._camTarget)
         }
       }
       if (state.flow.phase !== this.currentPhase) this.setPhase(state.flow.phase)
@@ -254,53 +254,46 @@ export class SceneManager {
     this._animate()
   }
 
-  // Kicks off a blend from the camera's CURRENT resolved pose to the target
-  // phase's pose. Never set camera.position/lookAt directly elsewhere —
-  // always route phase-driven moves through here so they go through
-  // cameraPath.js.
+  // Idles the render loop (RAF keeps ticking so a later resume needs no new
+  // listener, but update/render work is skipped) while the hero canvas is
+  // scrolled out of view behind the site content below it — see HeroPage's
+  // IntersectionObserver. Mission state is untouched; resuming picks up
+  // exactly where autoplay left off.
+  setPaused(paused) {
+    this._paused = paused
+    if (!paused) this._lastFrameMs = performance.now()
+  }
+
+  // Glides smoothly into the target phase's pose (rocket-frame poses still
+  // track the vehicle on top of that — that's framing, not the blend
+  // itself). The blend starts from wherever the camera is actually looking
+  // right now, free-look offset included (frozen via fromOrbit below), so a
+  // phase change never snaps even if the user has dragged the view around.
+  // Never set camera.position/lookAt directly elsewhere — always route
+  // phase-driven moves through here so they go through cameraPath.js.
   setPhase(phase) {
     if (phase === this.currentPhase) return
-    const oldPose = getCameraPose(this.currentPhase)
+    const fromPose = getCameraPose(this.currentPhase)
     const toPose = getCameraPose(phase)
-
-    // Snapshot where the camera is right now, so mid-transition phase
-    // changes blend instead of popping. When both shots track the rocket,
-    // capture the snapshot as OFFSETS from the old focus point — a static
-    // world snapshot would fall behind the accelerating vehicle and let it
-    // fly out of frame mid-blend.
-    let from
-    if (oldPose.frame === 'rocket' && toPose.frame === 'rocket' && this.rocket) {
-      const focus = new THREE.Vector3(0, oldPose.focusHeight ?? 0, 0)
-        .applyQuaternion(this.rocket.quaternion)
-        .add(this.rocket.position)
-      from = {
-        frame: 'rocket',
-        focusHeight: oldPose.focusHeight ?? 0,
-        position: this._camPos.clone().sub(focus).toArray(),
-        target: this._camTarget.clone().sub(focus).toArray(),
-        shake: oldPose.shake ?? 0,
-      }
-    } else {
-      from = {
-        position: this._camPos.toArray(),
-        target: this._camTarget.toArray(),
-        shake: oldPose.shake ?? 0,
-      }
+    if (toPose === fromPose) {
+      // Same pose object (unusual, but harmless) — nothing to blend.
+      this.currentPhase = phase
+      return
     }
-
-    // Each phase's slow orbit (and any free-look the user dialed in) starts
-    // fresh; the captured offsets above already include whatever rotation
-    // the old phase had accumulated.
-    this._autoOrbitAngle = 0
-    this._manualAzimuth = 0
-    this._manualPolar = 0
+    const fromOrbit = { azimuth: this._manualAzimuth, polar: this._manualPolar }
+    this.currentPhase = phase
     this._cameraTransition = {
-      from,
+      from: fromPose,
+      fromOrbit,
       to: toPose,
       start: performance.now(),
       duration: toPose.duration ?? DEFAULT_TRANSITION_DURATION,
     }
-    this.currentPhase = phase
+    // The user's free-look angle is per-shot; the new shot starts clean —
+    // the transition above already carries the outgoing view smoothly via
+    // fromOrbit, so this reset doesn't cause a jump.
+    this._manualAzimuth = 0
+    this._manualPolar = 0
   }
 
   // Choreography hook: 0 = engines out (shake dies), 1 = full burn. Smoothed
@@ -331,8 +324,9 @@ export class SceneManager {
   _updateCamera(dt) {
     const now = performance.now()
     const currentPose = getCameraPose(this.currentPhase)
-    this._autoOrbitAngle += (currentPose.orbitSpeed ?? 0) * dt
-    const orbit = { azimuth: this._autoOrbitAngle + this._manualAzimuth, polar: this._manualPolar }
+    // Only the user's free-look moves the view within a shot — there is no
+    // scripted orbit/drift anymore.
+    const orbit = { azimuth: this._manualAzimuth, polar: this._manualPolar }
 
     let shakeAmp = (currentPose.shake ?? 0)
     const transition = this._cameraTransition
@@ -342,7 +336,11 @@ export class SceneManager {
       resolvePoseWorld(
         transition.from,
         this.rocket,
-        orbit,
+        // Phase-change blends freeze the outgoing free-look angle at the
+        // moment of the cut (setPhase's fromOrbit) so the start point
+        // doesn't re-center; the inspect-exit blend has no fromOrbit and
+        // falls back to the live orbit, as before.
+        transition.fromOrbit ?? orbit,
         this._poseFromPos,
         this._poseFromTarget,
       )
@@ -397,6 +395,7 @@ export class SceneManager {
 
   _animate() {
     this._frameId = requestAnimationFrame(this._animate)
+    if (this._paused) return
 
     const now = performance.now()
     const dt = Math.min((now - (this._lastFrameMs ?? now)) / 1000, 0.1)
@@ -414,6 +413,10 @@ export class SceneManager {
     if (this.mode !== 'inspect') this._updateCamera(dt)
 
     this.exhaust?.update(dt)
+    // Earth presentation pass: atmosphere/cloud fades are camera-relative
+    // (flat wash when seen from inside) and the night-lights terminator
+    // tracks the key light — see Earth.update.
+    this.earth.update(this.camera, this.keyLight)
     this.sky.followCamera(this.camera.position)
     // Sun rides the camera at infinity, aimed along the key light, and fades
     // in with the stars as the atmosphere thins out.

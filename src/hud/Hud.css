@@ -33,7 +33,7 @@
 
 .hud-phase {
   position: absolute;
-  top: 1.6rem;
+  top: calc(var(--site-nav-height, 1.6rem) + 1rem);
   left: 1.75rem;
   max-width: 24rem;
   padding-left: 0.9rem;
@@ -62,7 +62,7 @@
 
 .hud-clock {
   position: absolute;
-  top: 1.6rem;
+  top: calc(var(--site-nav-height, 1.6rem) + 1rem);
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
@@ -186,4 +186,64 @@
 .hud-tick--now {
   background: var(--mc-amber);
   box-shadow: 0 0 8px rgba(255, 182, 72, 0.5);
+}
+
+/* ---- narrow viewports --------------------------------------------------
+   The desktop layout puts the phase block top-left and the GET clock
+   top-center, wide enough apart not to touch; below ~640px there isn't
+   room for both side by side (or three telemetry cells side by side, or
+   the hint sharing telemetry's row) without them running into each other.
+   Stack everything into one left-aligned column instead of shrinking text
+   until it's unreadable. */
+@media (max-width: 640px) {
+  .hud-phase {
+    max-width: calc(100vw - 3.5rem);
+  }
+
+  .hud-phase-name {
+    font-size: 1.35rem;
+  }
+
+  .hud-phase-detail {
+    font-size: 0.72rem;
+  }
+
+  .hud-clock {
+    left: 1.75rem;
+    transform: none;
+    text-align: left;
+    top: calc(var(--site-nav-height, 1.6rem) + 1rem + 7rem);
+  }
+
+  .hud-clock-value {
+    font-size: 1.1rem;
+  }
+
+  .hud-telemetry {
+    left: 1.75rem;
+    right: 1.75rem;
+  }
+
+  .hud-cell {
+    min-width: 0;
+    flex: 1;
+    padding: 0.55rem 0.6rem 0.5rem;
+  }
+
+  .hud-cell .hud-label {
+    font-size: 0.56rem;
+    letter-spacing: 0.12em;
+    white-space: nowrap;
+  }
+
+  .hud-value {
+    font-size: 0.8rem;
+  }
+
+  .hud-hint {
+    left: 1.75rem;
+    right: 1.75rem;
+    bottom: 7rem;
+    justify-content: center;
+  }
 }

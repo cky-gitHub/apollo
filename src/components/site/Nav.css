@@ -1,0 +1,142 @@
+.site-nav {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 30;
+  height: var(--site-nav-height);
+  display: flex;
+  align-items: center;
+  background: transparent;
+  border-bottom: 1px solid transparent;
+  transition:
+    background-color 0.4s ease,
+    border-color 0.4s ease;
+}
+
+.site-nav--solid {
+  background: rgba(7, 8, 10, 0.78);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--site-hairline);
+}
+
+.site-nav-inner {
+  width: 100%;
+  max-width: var(--site-max-width);
+  margin: 0 auto;
+  padding-inline: var(--site-gutter);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.site-nav-mark {
+  font-family: var(--site-font-display);
+  font-weight: 500;
+  font-size: 1.05rem;
+  letter-spacing: 0.22em;
+  color: var(--site-text);
+  text-decoration: none;
+}
+
+/* Legibility over whatever the 3D scene happens to be showing (bright sky,
+   Earth limb) before the nav has picked up its solid backing. */
+.site-nav:not(.site-nav--solid) .site-nav-mark,
+.site-nav:not(.site-nav--solid) .site-nav-link {
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.75);
+}
+
+.site-nav:not(.site-nav--solid) .site-nav-toggle span {
+  filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.75));
+}
+
+.site-nav-links {
+  display: flex;
+  align-items: center;
+  gap: clamp(1.1rem, 2.4vw, 2.25rem);
+}
+
+.site-nav-link {
+  font-family: var(--site-font-body);
+  font-size: 0.82rem;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  color: var(--site-text-mid);
+  text-decoration: none;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid transparent;
+  transition:
+    color 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.site-nav-link:hover {
+  color: var(--site-text);
+}
+
+.site-nav-link--active {
+  color: var(--site-accent-text);
+  border-bottom-color: var(--site-accent-soft);
+}
+
+.site-nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.site-nav-toggle span {
+  display: block;
+  height: 1px;
+  background: var(--site-text);
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+.site-nav-toggle--open span:first-child {
+  transform: translateY(3px) rotate(45deg);
+}
+
+.site-nav-toggle--open span:last-child {
+  transform: translateY(-3px) rotate(-45deg);
+}
+
+.site-nav-mobile {
+  display: none;
+}
+
+/* Below this width the HUD's own fixed-position readouts (phase name,
+   GET clock) need the full row, and there isn't room to also fit four
+   nav links beside the wordmark without wrapping into them — collapse to
+   a toggle + dropdown instead of shrinking text further. */
+@media (max-width: 720px) {
+  .site-nav-links {
+    display: none;
+  }
+
+  .site-nav-toggle {
+    display: flex;
+  }
+
+  .site-nav-mobile {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.5rem var(--site-gutter) 1.25rem;
+    background: rgba(7, 8, 10, 0.96);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--site-hairline);
+  }
+
+  .site-nav-mobile .site-nav-link {
+    padding: 0.6rem 0;
+    font-size: 0.95rem;
+    border-bottom: 1px solid var(--site-hairline);
+  }
+}

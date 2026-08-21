@@ -1,34 +1,64 @@
-html,
-body {
-  margin: 0;
-  height: 100%;
-  overflow: hidden;
+/* Shared layout utilities for content pages (everything but the hero,
+   which manages its own full-viewport layout in HeroPage.css). */
+
+.route-loading {
+  min-height: 100vh;
+  background: var(--site-bg);
 }
 
-#root {
-  width: 100%;
-  max-width: none;
-  min-height: 100svh;
-  margin: 0;
-  border-inline: none;
-  text-align: initial;
-  display: block;
+.page {
+  min-height: 100vh;
+  padding-top: var(--site-nav-height);
+  background: var(--site-bg);
+  color: var(--site-text);
+  font-family: var(--site-font-body);
 }
 
-.app-root {
-  position: relative;
-  width: 100vw;
-  height: 100svh;
-  overflow: hidden;
+.container {
+  max-width: var(--site-max-width);
+  margin: 0 auto;
+  padding-inline: var(--site-gutter);
 }
 
-.canvas-root {
-  position: absolute;
-  inset: 0;
+.eyebrow {
+  font-family: var(--site-font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--site-accent-text);
 }
 
-.canvas-root canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
+.section-heading {
+  font-family: var(--site-font-display);
+  font-weight: 500;
+  font-size: clamp(1.8rem, 3.4vw, 2.6rem);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--site-text);
+  margin: 0.5rem 0 0;
+}
+
+.lede {
+  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+  font-weight: 300;
+  line-height: 1.6;
+  color: var(--site-text-mid);
+  max-width: 42em;
+}
+
+.body-copy {
+  font-size: 1rem;
+  line-height: 1.75;
+  color: var(--site-text-mid);
+  max-width: 42em;
+}
+
+.body-copy p + p {
+  margin-top: 1.1em;
+}
+
+.body-copy strong {
+  color: var(--site-text);
+  font-weight: 500;
 }

@@ -4,8 +4,6 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 const EXPLODE_GAP = 15 // meters of extra spacing per stage boundary once exploded
 const STAGE_TRANSITION_DURATION = 800 // ms
 const CLICK_DRAG_THRESHOLD = 5 // px of pointer movement still counted as a click
-const FRAMING_PADDING = 30 // m, so a single remaining stage still gets a non-zero span to frame
-const MIN_FRAMING_SCALE = 0.2 // floor so framing never zooms in absurdly close
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const LABEL_OFFSET_X = 110 // px, callout sits this far to the side of its stage's screen anchor
 const LABEL_OFFSET_Y = -6 // px
@@ -40,7 +38,11 @@ export class InspectionController {
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.08
     this.controls.minDistance = 12
-    this.controls.maxDistance = 260
+    // Generous ceiling: inspect mode inherits the camera from WHEREVER the
+    // mission framing currently is (it no longer jumps to a canned offset),
+    // and some flow shots sit farther out than the old 260 — a tighter clamp
+    // would visibly yank the camera inward on the first controls.update().
+    this.controls.maxDistance = 700
 
     this._labelContainer = labelContainer
 
@@ -129,40 +131,28 @@ export class InspectionController {
   // jettisoned stage's slot collapses instead of leaving a gap sized for
   // hardware that isn't there anymore (matters mid-flight; with the full
   // stack present this is identical to stack order).
-  _explodedY(stageId) {
+  //
+  // The whole layout is then re-centered on the present stack's CURRENT
+  // midpoint (see _explodeShift), so the explosion expands outward in place
+  // — the camera stays frozen on the mission view when inspect opens, and a
+  // layout that only grew upward would walk half the vehicle out of frame.
+  _rawExplodedY(stageId) {
     const presentIds = this._presentStageIds()
     const compactIndex = presentIds.indexOf(stageId)
     const index = compactIndex !== -1 ? compactIndex : [...this.stageGroups.keys()].indexOf(stageId)
     return this._stackY.get(stageId) + index * EXPLODE_GAP
   }
 
-  // World-space midpoint of the currently-attached stack's EXPLODED layout
-  // (not a fixed pad spot, and not the collapsed stack Y either — the
-  // camera/orbit-target framing is tuned for the exploded overview, which
-  // is where a fresh click-to-inspect always lands). The rocket may be
-  // mid-flight and tilted, so this rides its current transform the same way
-  // cameraPath.js's rocket-frame poses do.
-  getFocusWorldPosition(target = new THREE.Vector3()) {
-    const ys = this._presentStageIds().map((id) => this._explodedY(id))
-    const midY = (Math.min(...ys) + Math.max(...ys)) / 2
-    return target
-      .set(0, midY, 0)
-      .applyQuaternion(this.rocket.quaternion)
-      .add(this.rocket.position)
+  _explodeShift() {
+    const presentIds = this._presentStageIds()
+    const mid = (ys) => (Math.min(...ys) + Math.max(...ys)) / 2
+    const collapsedMid = mid(presentIds.map((id) => this._stackY.get(id)))
+    const explodedMid = mid(presentIds.map((id) => this._rawExplodedY(id)))
+    return explodedMid - collapsedMid
   }
 
-  // How much of the fully-exploded stack's vertical span the currently-
-  // present stages cover, as a 0-1 scale — so the inspect camera zooms in
-  // when little of the vehicle remains (e.g. just the LM, late in the
-  // mission) instead of framing empty space sized for the whole stack.
-  getFramingScale() {
-    const allIds = [...this.stageGroups.keys()]
-    const presentYs = this._presentStageIds().map((id) => this._explodedY(id))
-    const allYs = allIds.map((id) => this._explodedY(id))
-    const presentSpan = Math.max(...presentYs) - Math.min(...presentYs)
-    const fullSpan = Math.max(...allYs) - Math.min(...allYs)
-    const scale = (presentSpan + FRAMING_PADDING) / (fullSpan + FRAMING_PADDING)
-    return THREE.MathUtils.clamp(scale, MIN_FRAMING_SCALE, 1)
+  _explodedY(stageId) {
+    return this._rawExplodedY(stageId) - this._explodeShift()
   }
 
   _onStoreChange(state) {
@@ -203,18 +193,20 @@ export class InspectionController {
     this._updateOrbitTarget(isolatedId)
   }
 
+  // Only an ISOLATE click retargets the orbit (an intentional "focus on this
+  // stage"). Entering inspect / returning to the exploded overview leaves the
+  // target wherever it is — the whole point of the frozen-view inspect entry
+  // (SceneManager hands OrbitControls the current shot's look-target) is that
+  // the camera never jumps on the user.
   _updateOrbitTarget(isolatedId) {
-    if (isolatedId) {
-      const group = this.stageGroups.get(isolatedId)
-      if (group) {
-        this.controls.target
-          .set(0, group.position.y, 0)
-          .applyQuaternion(this.rocket.quaternion)
-          .add(this.rocket.position)
-      }
-      return
+    if (!isolatedId) return
+    const group = this.stageGroups.get(isolatedId)
+    if (group) {
+      this.controls.target
+        .set(0, group.position.y, 0)
+        .applyQuaternion(this.rocket.quaternion)
+        .add(this.rocket.position)
     }
-    this.getFocusWorldPosition(this.controls.target)
   }
 
   _explode() {

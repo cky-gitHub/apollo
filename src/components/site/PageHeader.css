@@ -1,0 +1,18 @@
+.page-header {
+  padding: clamp(3.5rem, 9vh, 6rem) 0 clamp(2.5rem, 6vh, 3.5rem);
+  border-bottom: 1px solid var(--site-hairline);
+}
+
+.page-header-title {
+  font-family: var(--site-font-display);
+  font-weight: 500;
+  font-size: clamp(2.4rem, 5.5vw, 4rem);
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  color: var(--site-text);
+  margin: 0.6rem 0 1.1rem;
+}
+
+.page-header .lede {
+  margin: 0;
+}

@@ -1,0 +1,34 @@
+/* The hero stays pinned to the viewport (canvas + HUD, both position:fixed
+   per Hud.css's own convention) while a spacer of the same height reserves
+   scroll room beneath it. HeroIntro then rides up over the pinned hero as
+   the page scrolls — a curtain reveal into the rest of the site, not a
+   normal in-flow section (see conversation notes: Hud.css is intentionally
+   viewport-fixed, so the canvas has to stay fixed alongside it or the two
+   would drift apart while scrolling). */
+
+.hero-page {
+  position: relative;
+}
+
+.hero-fixed {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  background: var(--mc-bg);
+}
+
+.hero-canvas-root {
+  position: absolute;
+  inset: 0;
+}
+
+.hero-canvas-root canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.hero-spacer {
+  height: 100svh;
+}

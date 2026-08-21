@@ -1,0 +1,49 @@
+.program-section {
+  padding: 3.25rem 0;
+  border-bottom: 1px solid var(--site-hairline);
+}
+
+.program-section--last {
+  border-bottom: none;
+  padding-bottom: 6rem;
+}
+
+.program-section .section-heading {
+  margin-bottom: 1.5rem;
+}
+
+.stage-grid {
+  margin-top: 2rem;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+}
+
+.stage-card {
+  padding: 1.5rem;
+  border: 1px solid var(--site-hairline);
+  border-radius: var(--site-radius);
+  background: var(--site-bg-card);
+}
+
+.stage-card h3 {
+  font-family: var(--site-font-mono);
+  font-size: 1.15rem;
+  font-weight: 500;
+  color: var(--site-text);
+  margin: 0.5rem 0 0.6rem;
+  letter-spacing: 0.02em;
+}
+
+.stage-card p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--site-text-mid);
+}
+
+@media (max-width: 720px) {
+  .stage-grid {
+    grid-template-columns: 1fr;
+  }
+}

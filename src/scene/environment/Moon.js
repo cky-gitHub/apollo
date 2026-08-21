@@ -113,9 +113,13 @@ export class Moon {
     this.sphere = new THREE.Mesh(new THREE.SphereGeometry(MOON_RADIUS, 96, 64), this._material)
     // Poles horizontal: the landing happens on the sphere's top, and an
     // equirect map is least distorted at its equator — so put the equator up
-    // there. The y-spin picks a mare-ish stretch for the landing site.
+    // there. The y-spin (applied before the z-flip, XYZ order) both picks
+    // the landing-site stretch AND parks the UV poles on the world ±Z axis
+    // (pole dir = (∓cos y, 0, ±sin y)), where the tiled bump map's radial
+    // pole-pinch artifact stays on the far side / edge-on for every phase
+    // camera — at y=1.1 it sat dead-center in the phase-8 approach disc.
     this.sphere.rotation.z = Math.PI / 2
-    this.sphere.rotation.y = 1.1
+    this.sphere.rotation.y = Math.PI / 2
     this.group.add(this.sphere)
   }
 

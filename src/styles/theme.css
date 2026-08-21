@@ -3,9 +3,12 @@
    readings, mono digits + a light wide-tracked sans for names. Deliberately
    fixed (no prefers-color-scheme): this is a themed instrument panel, not an
    adaptive UI. It shares its sans with the in-scene stage labels so the HUD
-   and the 3D callouts read as one system. */
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500&display=swap');
+   and the 3D callouts read as one system.
+
+   Fonts (JetBrains Mono, Inter) are self-hosted — imported once as npm
+   packages in main.jsx — rather than pulled from the Google Fonts CDN, so no
+   visitor IP is shared with a third party. See site-theme.css for the
+   surrounding website's own type choices. */
 
 :root {
   /* surfaces */
@@ -28,10 +31,10 @@
 
   /* type */
   --mc-font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, 'Courier New', monospace;
-  --mc-font-sans: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mc-font-sans: 'Inter Variable', 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
   /* Light, wide-tracked sans for in-scene callouts (stage labels) — museum
      placard, not instrument readout. Same family as the HUD phase names. */
-  --label-font: 'Inter', system-ui, 'Segoe UI', sans-serif;
+  --label-font: 'Inter Variable', 'Inter', system-ui, 'Segoe UI', sans-serif;
 
   /* one very soft glow, reserved for the amber values */
   --mc-glow-sm: 0 0 12px rgba(255, 182, 72, 0.25);
