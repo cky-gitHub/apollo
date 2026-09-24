@@ -29,44 +29,46 @@ import * as THREE from 'three'
 //    change (setPhase) and for the return glide out of inspect mode
 //  - shake: camera shake amplitude in meters while this phase is active,
 //    multiplied by the choreography-driven shake gain (engines on/off)
-// The flight camera's fixed offset from the focus point: the liftoff shot's
-// viewing direction, (0.41, 0.2, 0.89), at a single distance of 60 units —
-// close enough that the 7 m lander still reads, far enough that the current
-// stage of the full stack is framed.
-export const FLIGHT_CAMERA_OFFSET = [24.6, 12, 53.4]
+// The flight camera's fixed viewing direction from the focus point: the
+// liftoff shot's, continued. Every flight phase sits somewhere on this one
+// line; only its distance differs.
+const FLIGHT_CAMERA_DIRECTION = [0.41, 0.2, 0.89]
+const flightOffset = (distance) => FLIGHT_CAMERA_DIRECTION.map((d) => d * distance)
 
 export const CAMERA_PHASES = [
   { position: [60, 64, 270], target: [0, 62, 0] }, // 0: pad, countdown
   { position: [30, 25, 70], target: [0, 20, 0], shake: 0.35 }, // 1: ignition
   { position: [70, 90, 150], target: [0, 55, 0], shake: 0.55, duration: 1600 }, // 2: liftoff, tower clear
-  // 3-13: ONE camera for the whole flight. Same direction, same distance,
-  // every phase — the only thing that changes is focusHeight, which walks up
-  // the stack to whatever stage is current, so the camera slides along with
-  // it. There used to be a separately tuned pose per phase, and the glide
+  // 3-13: ONE viewing direction for the whole flight; each phase only sets
+  // how far back the camera sits (wide on the full stack, close on the
+  // lander) and focusHeight, which walks up the stack to the current stage.
+  // There used to be a differently ANGLED pose per phase, and the glide
   // between two of them cut a straight line past the vehicle: every phase
-  // change zoomed in, back out, and swung the view round. With one pose there
-  // is nothing to glide between. Earth and the Moon are placed in front of
-  // this camera (StagingChoreography's EARTH_LINE / MOON_LINE), not the
-  // other way round.
-  //
-  // The direction continues the liftoff shot's (phase 2), so leaving the pad
-  // is the one and only change of view.
+  // change zoomed in, back out and swung the view round. On a single line a
+  // phase change is a plain dolly in or out - no dip, no rotation. Earth and
+  // the Moon are placed in front of this camera (StagingChoreography's
+  // EARTH_LINE / MOON_LINE), not the other way round.
   ...[
-    { focusHeight: 55, shake: 0.85, duration: 2800 }, // 3: Max-Q / S-IC ascent
-    { focusHeight: 58, shake: 0.3, duration: 3200 }, // 4: S-IC sep / S-II ignition
-    { focusHeight: 76, shake: 0.3, duration: 3000 }, // 5: S-II ascent, tower jettison
-    { focusHeight: 88, shake: 0.3, duration: 3000 }, // 6: S-IVB burn / TLI
-    { focusHeight: 100, duration: 3200 }, // 7: transposition & docking
-    { focusHeight: 98, duration: 3000 }, // 8: lunar approach
-    { focusHeight: 93, duration: 3400 }, // 9: powered descent / touchdown
+    { distance: 195, focusHeight: 55, shake: 0.85, duration: 2800 }, // 3: Max-Q / S-IC ascent
+    { distance: 190, focusHeight: 58, shake: 0.3, duration: 3200 }, // 4: S-IC sep / S-II ignition
+    { distance: 111, focusHeight: 76, shake: 0.3, duration: 3000 }, // 5: S-II ascent, tower jettison
+    { distance: 74, focusHeight: 88, shake: 0.3, duration: 3000 }, // 6: S-IVB burn / TLI
+    { distance: 62, focusHeight: 100, duration: 3200 }, // 7: transposition & docking
+    { distance: 70, focusHeight: 98, duration: 3000 }, // 8: lunar approach
+    { distance: 41, focusHeight: 93, duration: 3400 }, // 9: powered descent / touchdown
     // 10: Tranquility Base — the offset's height keeps the camera above the
     // sphere's grazing curvature (a camera at focus-1 ends up underground and
     // the Moon front-face culls away)
-    { focusHeight: 90, duration: 3800 },
-    { focusHeight: 90, duration: 3200 }, // 11: lunar liftoff & rendezvous
-    { focusHeight: 99, duration: 3000 }, // 12: trans-Earth injection
-    { focusHeight: 97, shake: 0.5, duration: 3400 }, // 13: reentry & splashdown
-  ].map((pose) => ({ frame: 'rocket', position: FLIGHT_CAMERA_OFFSET, target: [0, 0, 0], ...pose })),
+    { distance: 40, focusHeight: 90, duration: 3800 },
+    { distance: 50, focusHeight: 90, duration: 3200 }, // 11: lunar liftoff & rendezvous
+    { distance: 44, focusHeight: 99, duration: 3000 }, // 12: trans-Earth injection
+    { distance: 57, focusHeight: 97, shake: 0.5, duration: 3400 }, // 13: reentry & splashdown
+  ].map(({ distance, ...pose }) => ({
+    frame: 'rocket',
+    position: flightOffset(distance),
+    target: [0, 0, 0],
+    ...pose,
+  })),
 ]
 
 export const DEFAULT_TRANSITION_DURATION = 1200
