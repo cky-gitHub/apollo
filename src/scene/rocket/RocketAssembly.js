@@ -2,9 +2,9 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { STAGE_SPECS } from '../../data/stageSpecs.js'
 
-const SATURN_V_MODEL_URL = '/models/Saturn%20V.glb'
-const SATURN_V_TOP_MODEL_URL = '/models/very%20top.glb'
-const LM_MODEL_URL = '/models/lunar%20module.glb'
+const SATURN_V_MODEL_URL = import.meta.env.BASE_URL + 'models/Saturn%20V.glb'
+const SATURN_V_TOP_MODEL_URL = import.meta.env.BASE_URL + 'models/very%20top.glb'
+const LM_MODEL_URL = import.meta.env.BASE_URL + 'models/lunar%20module.glb'
 const FEET_TO_METERS = 0.3048
 const TOP_ADAPTER_HEIGHT = 4.9
 const TOP_BODY_BOTTOM_NAME = 'SM Body, Bottom'

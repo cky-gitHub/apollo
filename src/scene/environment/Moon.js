@@ -10,7 +10,7 @@ import * as THREE from 'three'
 // would read flat.
 //
 // Texture: NASA SVS "CGI Moon Kit" LROC color map (public domain).
-const MOON_TEXTURE_URL = '/textures/moon_lroc_color_4k.jpg'
+const MOON_TEXTURE_URL = import.meta.env.BASE_URL + 'textures/moon_lroc_color_4k.jpg'
 export const MOON_RADIUS = 1500 // world units at scale 1
 
 // Deterministic PRNG so the crater field (and therefore screenshots) is

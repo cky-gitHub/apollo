@@ -20,9 +20,11 @@ function Footer() {
             <Link to="/about">About</Link>
           </nav>
 
+          {/* Plain anchors, not router links: these leave this app for the
+              main site it is mounted in. */}
           <nav className="site-footer-links" aria-label="Legal">
-            <Link to="/legal/impressum">Impressum</Link>
-            <Link to="/legal/privacy">Privacy</Link>
+            <a href="/">ckyogeshwar.com</a>
+            <a href="/privacy">Privacy</a>
           </nav>
         </div>
 
@@ -30,10 +32,31 @@ function Footer() {
           <p>
             Earth imagery: NASA Blue Marble (public domain). Moon imagery: NASA SVS CGI Moon Kit,
             LROC color map (public domain). Mission telemetry and timeline data adapted from the NASA
-            Apollo 11 Flight Journal. Saturn V and Lunar Module 3D models: [PLACEHOLDER — confirm and
-            credit the exact source/license of the model files before publishing].
+            Apollo 11 Flight Journal. 3D models, both{' '}
+            <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer noopener">
+              CC BY 4.0
+            </a>
+            , optimised for the web:{' '}
+            <a
+              href="https://sketchfab.com/3d-models/apollo-saturn-v-launch-vehicle-7c61146069134981a84dc7ed951609a0"
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              Apollo | Saturn V Launch Vehicle
+            </a>{' '}
+            by devPilot;{' '}
+            <a
+              href="https://sketchfab.com/3d-models/apollo-spacecraft-block-2-release-2012-dec-31-fdcae17bbfa04101b86e4ce920367982"
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              Apollo Spacecraft, Block 2
+            </a>{' '}
+            by 3dpilgrim. Neither author endorses this site.
           </p>
-          <p className="site-footer-copyright">© {new Date().getFullYear()} Apollo project. Not affiliated with or endorsed by NASA.</p>
+          <p className="site-footer-copyright">
+            © {new Date().getFullYear()} Constantin Yogeshwar. Not affiliated with or endorsed by NASA.
+          </p>
         </div>
       </div>
     </footer>

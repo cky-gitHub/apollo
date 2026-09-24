@@ -17,8 +17,6 @@ const ProgramPage = lazy(() => import('./pages/ProgramPage.jsx'))
 const Apollo11Page = lazy(() => import('./pages/Apollo11Page.jsx'))
 const MissionsIndexPage = lazy(() => import('./pages/MissionsIndexPage.jsx'))
 const MissionDetailPage = lazy(() => import('./pages/MissionDetailPage.jsx'))
-const ImpressumPage = lazy(() => import('./pages/ImpressumPage.jsx'))
-const PrivacyPage = lazy(() => import('./pages/PrivacyPage.jsx'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage.jsx'))
 
 function Layout() {
@@ -47,8 +45,6 @@ function App() {
         <Route path="/apollo-11" element={<Apollo11Page />} />
         <Route path="/missions" element={<MissionsIndexPage />} />
         <Route path="/missions/:missionId" element={<MissionDetailPage />} />
-        <Route path="/legal/impressum" element={<ImpressumPage />} />
-        <Route path="/legal/privacy" element={<PrivacyPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

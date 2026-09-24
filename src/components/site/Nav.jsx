@@ -46,6 +46,11 @@ function Nav({ isHero }) {
               {link.label}
             </NavLink>
           ))}
+          {/* Back out to the main site this app is mounted in. A plain
+              anchor: the router's links stay inside /apollo. */}
+          <a href="/" className="site-nav-link site-nav-home">
+            ← cky
+          </a>
         </nav>
 
         <button
@@ -71,6 +76,11 @@ function Nav({ isHero }) {
               {link.label}
             </NavLink>
           ))}
+          {/* Back out to the main site this app is mounted in. A plain
+              anchor: the router's links stay inside /apollo. */}
+          <a href="/" className="site-nav-link site-nav-home">
+            ← cky
+          </a>
         </nav>
       )}
     </header>

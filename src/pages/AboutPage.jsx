@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import PageHeader from '../components/site/PageHeader.jsx'
 import '../App.css'
 
@@ -30,12 +29,10 @@ function AboutPage() {
             roster of the eleven crewed flights that got us there and back.
           </p>
           <p>
-            <strong>[PLACEHOLDER — about the author]</strong> This project was designed and built by{' '}
-            <strong>[your name]</strong>, [a short line about who you are — engineer, designer, space
-            history enthusiast, whatever is true]. It is an independent, unofficial project and is not
+            This project was designed and built by Constantin Yogeshwar, as part of{' '}
+            <a href="/">ckyogeshwar.com</a>. It is an independent, unofficial project and is not
             affiliated with, endorsed by, or sponsored by NASA. Corrections, source citations, and
-            technical notes are welcome — see the contact details on the{' '}
-            <Link to="/legal/impressum">Impressum</Link> page.
+            technical notes are welcome — see the <a href="/about#contact">contact details</a>.
           </p>
         </div>
       </section>

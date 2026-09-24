@@ -21,11 +21,11 @@ import * as THREE from 'three'
 //  - earth_clouds_2048.jpg — NASA cloud fraction composite (Visible Earth
 //    record 57747, public domain), used as the alpha of a separate thin
 //    cloud shell so the marble reads layered instead of decal-flat.
-const EARTH_TEXTURE_URL = '/textures/earth_blue_marble_8k.jpg'
-const NIGHT_TEXTURE_URL = '/textures/earth_night_lights_4800.jpg'
-const NORMAL_TEXTURE_URL = '/textures/earth_normal_2048.jpg'
-const ROUGHNESS_TEXTURE_URL = '/textures/earth_roughness_2048.jpg'
-const CLOUDS_TEXTURE_URL = '/textures/earth_clouds_2048.jpg'
+const EARTH_TEXTURE_URL = import.meta.env.BASE_URL + 'textures/earth_blue_marble_8k.jpg'
+const NIGHT_TEXTURE_URL = import.meta.env.BASE_URL + 'textures/earth_night_lights_4800.jpg'
+const NORMAL_TEXTURE_URL = import.meta.env.BASE_URL + 'textures/earth_normal_2048.jpg'
+const ROUGHNESS_TEXTURE_URL = import.meta.env.BASE_URL + 'textures/earth_roughness_2048.jpg'
+const CLOUDS_TEXTURE_URL = import.meta.env.BASE_URL + 'textures/earth_clouds_2048.jpg'
 export const EARTH_RADIUS = 1800 // world units at scale 1
 
 const CLOUD_SHELL = 1.004 // clouds float just off the surface

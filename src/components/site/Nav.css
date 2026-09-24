@@ -140,3 +140,9 @@
     border-bottom: 1px solid var(--site-hairline);
   }
 }
+
+/* The way back to ckyogeshwar.com, set apart from Apollo's own pages. */
+.site-nav-links .site-nav-home {
+  padding-left: 1.4rem;
+  border-left: 1px solid var(--site-hairline);
+}
