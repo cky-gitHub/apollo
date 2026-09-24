@@ -169,22 +169,25 @@ const aim = ([x, y, z]) => {
   return { tilt: Math.acos(y / len), yaw: Math.atan2(-z, x) }
 }
 
-// ONE Earth-Moon line for the whole flight, fixed in world space.
+// Where Earth and the Moon sit, laid out for the ONE fixed flight camera
+// (cameraPath.js FLIGHT_CAMERA_OFFSET) rather than per phase.
 //
-// This used to be a per-phase set of hand-picked directions (Moon at +z in
-// phase 7, -z in 8, Earth flipping sides again for 12), so every phase change
-// swung the bodies across the sky. Now the Moon always sits along MOON_LINE
-// and Earth along EARTH_LINE = -MOON_LINE: outbound, Earth is behind and the
-// Moon ahead; at the Moon, Earth hangs in that same patch of sky; on the way
-// home it is ahead again. Only distances change between phases - the bodies
-// grow and shrink, they do not wander. The lunar-surface phases are the one
-// exception, where the Moon is underfoot as terrain.
+// Earth is always in the background to the LOWER LEFT of the frame and the
+// Moon to the UPPER RIGHT, each ~33 deg off the view axis so they stay in
+// shot; phases only change how far away (how big) they are. The flight
+// reads left to right on the way out and right to left on the way home, and
+// because the camera never turns, neither body ever wanders across the sky.
+// They used to be hand-placed per phase in unrelated directions, which is
+// what made them feel arbitrary. The sun (LIGHT_SPACE) sits behind the
+// camera, so both show their lit face.
 //
-// The line is chosen against LIGHT_SPACE (nearly perpendicular to it) so that
-// both an Earth-facing and a Moon-facing camera see a lit, gibbous body, and
-// with the Moon on the -z side so the default +z-side cameras face it.
-const MOON_LINE = [0.803, -0.199, -0.562]
-const EARTH_LINE = [-MOON_LINE[0], -MOON_LINE[1], -MOON_LINE[2]]
+// On the lunar surface (9-11) Earth has to be above the horizon, so it rides
+// a little higher on the same left side (EARTH_SURFACE_DIR); in lunar orbit
+// the Moon is below (MOON_BELOW_11).
+const MOON_LINE = [0.038, 0.163, -0.986]
+const EARTH_LINE = [-0.733, -0.444, -0.516]
+const EARTH_SURFACE_DIR = [-0.738, 0.173, -0.652]
+const MOON_BELOW_11 = [-0.204, -0.731, -0.651]
 
 // From phase 7 to 12 the vehicle does NOT travel. It used to move hundreds of
 // units between phases, and the camera - a smoothed chase - lagged far enough
@@ -192,21 +195,22 @@ const EARTH_LINE = [-MOON_LINE[0], -MOON_LINE[1], -MOON_LINE[2]]
 // is carried entirely by the bodies around it; burns read through the plume.
 const FLIGHT_POS = [760, 2510, 0]
 
-// Attitudes, as stack +Y directions (see aim()):
-//  - 7, T&D: square to the Earth-Moon line, so the docking plays side-on
-//    with Earth behind it. Reached by a real post-TLI attitude manoeuvre
-//    (39 deg from the TLI attitude) BEFORE the SLA opens.
-//  - 8, LOI: +Y (the SPS end, forward after the transposition flip) along
-//    MOON_LINE - engine-first into the braking burn.
-//  - 11, docked in lunar orbit: pitched halfway between vertical and the
-//    Moon line, reached during the ascent burn.
-//  - 12, TEI: +Y along MOON_LINE again, i.e. the CM apex leads home while the
-//    SPS points back at the Moon - the real TEI attitude.
-const ATT_7 = [0.499, 0.741, 0.45]
-const AIM_7 = aim(ATT_7)
-const AIM_8 = aim(MOON_LINE)
-const AIM_11 = aim([0.634, 0.633, -0.444])
-const AIM_12 = aim(MOON_LINE)
+// See SETTLED[12].
+const TEI_BACKDROP_MOON_KM = 30000
+
+// Attitudes, as stack +Y directions (see aim()). After transposition +Y is
+// the SPS engine end and the lander (later the CM apex) is the -Y end.
+//  - 7, T&D: the TLI attitude, unchanged — the docking happens without the
+//    stack turning at all.
+//  - 8, LOI: nose (the lander) toward the Moon, engine behind: +Y = -MOON.
+//    Turned into before the burn (96 deg, beat 8's first 3 s).
+//  - 11, docked in lunar orbit: halfway between vertical and the TEI
+//    attitude, reached during the ascent burn.
+//  - 12, TEI: CM apex toward Earth, engine back toward the Moon: +Y = -EARTH.
+const AIM_7 = { tilt: 63 * DEG, yaw: 0 }
+const AIM_8 = aim([-MOON_LINE[0], -MOON_LINE[1], -MOON_LINE[2]])
+const AIM_11 = aim([0.431, 0.85, 0.303])
+const AIM_12 = aim([-EARTH_LINE[0], -EARTH_LINE[1], -EARTH_LINE[2]])
 
 // The Pacific recovery zone only exists for phase 13 — every other phase
 // holds it at the splash site with opacity 0 so the reveal is a fade under
@@ -320,14 +324,12 @@ const SETTLED = [
   },
   // 9: the Moon as standing terrain — full ground-radius sphere whose top
   // surface sits exactly under the LM's footpads (stack-local y=91) at the
-  // flight position. Earth stays on its line: low in the sky over the
-  // horizon, on the camera side (LIGHT_SURFACE puts the sun low at -z, and
-  // an Earth opposite the sun would render as an unlit sliver).
+  // flight position. Earth low over the horizon on the left.
   {
     pos: FLIGHT_POS, tilt: 0, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'gone', lm: true,
     env: {
-      earth: bodyMark(EARTH_BODY, FLIGHT_POS, EARTH_LINE, PHASES[9].distEarthKm),
+      earth: bodyMark(EARTH_BODY, FLIGHT_POS, EARTH_SURFACE_DIR, PHASES[9].distEarthKm),
       moon: groundMark(MOON_BODY, FLIGHT_POS[0], FLIGHT_POS[2], FLIGHT_POS[1] + 91),
       ocean: OCEAN_HIDDEN, light: LIGHT_SURFACE,
     },
@@ -339,7 +341,7 @@ const SETTLED = [
     pos: FLIGHT_POS, tilt: 0, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'gone', lm: true,
     env: {
-      earth: bodyMark(EARTH_BODY, FLIGHT_POS, EARTH_LINE, PHASES[10].distEarthKm),
+      earth: bodyMark(EARTH_BODY, FLIGHT_POS, EARTH_SURFACE_DIR, PHASES[10].distEarthKm),
       moon: groundMark(MOON_BODY, FLIGHT_POS[0], FLIGHT_POS[2], FLIGHT_POS[1] + 91),
       ocean: OCEAN_HIDDEN, light: LIGHT_SURFACE,
     },
@@ -352,19 +354,23 @@ const SETTLED = [
     pos: FLIGHT_POS, tilt: AIM_11.tilt, yaw: AIM_11.yaw, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB', 'LM-DS'], csm: 'docked', lm: true,
     env: {
-      earth: bodyMark(EARTH_BODY, FLIGHT_POS, EARTH_LINE, PHASES[11].distEarthKm),
-      moon: bodyMark(MOON_BODY, FLIGHT_POS, [0.3, -1, -0.5], PHASES[11].distMoonKm),
+      earth: bodyMark(EARTH_BODY, FLIGHT_POS, EARTH_SURFACE_DIR, PHASES[11].distEarthKm),
+      moon: bodyMark(MOON_BODY, FLIGHT_POS, MOON_BELOW_11, PHASES[11].distMoonKm),
       ocean: OCEAN_HIDDEN, light: LIGHT_SPACE,
     },
   },
-  // 12: trans-Earth injection, 3,200 km out. Earth a dot ahead on its line,
-  // the still-huge Moon falling away behind on its own.
+  // 12: trans-Earth injection. Earth a dot ahead on its line, the Moon
+  // falling away behind. The backdrop is set a little further along the coast
+  // home (TEI_BACKDROP_MOON_KM) than the HUD's 3,200 km TEI-cutoff figure: at
+  // the true 3,200 km the Moon still subtends ~20 deg, and swinging it from
+  // below the frame into full view made it read as GROWING - as if heading
+  // back toward it. From 30,000 km it plainly shrinks as the burn pushes away.
   {
     pos: FLIGHT_POS, tilt: AIM_12.tilt, yaw: AIM_12.yaw, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB', 'LM-DS', 'LM'], csm: 'docked', lm: true,
     env: {
       earth: bodyMark(EARTH_BODY, FLIGHT_POS, EARTH_LINE, PHASES[12].distEarthKm),
-      moon: bodyMark(MOON_BODY, FLIGHT_POS, MOON_LINE, PHASES[12].distMoonKm),
+      moon: bodyMark(MOON_BODY, FLIGHT_POS, MOON_LINE, TEI_BACKDROP_MOON_KM),
       ocean: OCEAN_HIDDEN, light: LIGHT_SPACE,
     },
   },
@@ -543,11 +549,10 @@ const BEATS = {
     // beat while the SLA/CSM/S-IVB choreography plays out in front of a
     // stationary camera — no engine fires again until beat 8's SPS.
     progress: holdThenEase(0, 0.9 / 19.3),
-    // The post-TLI attitude manoeuvre, 1.2-4.4s: the S-IVB turns the stack
-    // square to the Earth-Moon line while Earth recedes behind it, and ALL
-    // of it is finished before the SLA pyros fire at 4.7s. From then on
-    // nothing moves but the hardware being handled: the stack holds its
-    // attitude and the backdrop holds still through the whole docking.
+    // The stack keeps its TLI attitude throughout (AIM_7), and Earth
+    // finishes receding (1.0-4.4s) before the SLA pyros fire at 4.7s. From
+    // then on nothing moves but the hardware being handled: the backdrop
+    // holds still through the whole docking.
     ease: holdThenEase(1.2 / 19.3, 4.4 / 19.3),
     envEase: holdThenEase(1.0 / 19.3, 4.4 / 19.3),
     valid: (c) => !c._detached.has('S-IVB') && c._csmState === 'stowed',
@@ -654,12 +659,15 @@ const BEATS = {
     // Coasting toward the Moon, dead still, until the SPS lights (3.2s);
     // frozen again once it cuts off (8.4s) for the rest of the approach.
     progress: holdThenEase(3.2 / 11, 8.4 / 11),
-    // Turn engine-first onto the Moon line (0.2-3.0s) BEFORE the burn, not
-    // during it; the Moon then swells ahead through the approach and burn.
+    // Turn nose-first toward the Moon (0.2-3.0s) BEFORE the burn, not during
+    // it; the Moon then swells ahead through the approach and burn.
     ease: holdThenEase(0.2 / 11, 3.0 / 11),
     envEase: holdThenEase(0.4 / 11, 8.4 / 11),
     valid: (c) => c._csmState === 'docked' && c._detached.has('S-IVB'),
     events: [
+      // The spent S-IVB stays behind with Earth instead of floating along
+      // beside a vehicle that no longer moves through the scene.
+      { at: 0, run: (c) => c._pinDebrisTo('S-IVB', c.earth) },
       {
         at: 3.2,
         run: (c, instant) => {
@@ -861,6 +869,9 @@ const BEATS = {
       {
         at: 3.0,
         run: (c, instant) => {
+          // Eagle stays in lunar orbit: from here it recedes with the Moon
+          // rather than drifting home beside Columbia.
+          c._pinDebrisTo('LM', c.moon)
           c._exhausts['SPS'].ignite()
           c._exhausts['SPS'].setStretch(1)
           c._setVibe(0.45)
@@ -1459,6 +1470,19 @@ export class StagingChoreography {
     this._detached.add(id)
     if (instant || !this.moon) entry.object.removeFromParent()
     else this.moon.group.attach(entry.object)
+  }
+
+  // Hands a piece of drifting debris to a body's group, so from then on it
+  // moves and shrinks with that body - the way the descent stage stays with
+  // the Moon. Needed because the vehicle is parked from phase 7 on: debris
+  // left to drift freely would simply travel along with it.
+  _pinDebrisTo(id, body) {
+    const object = this._jettisonable[id]?.object
+    if (!object || !body?.group) return
+    const index = this._debris.findIndex((debris) => debris.object === object)
+    if (index === -1) return
+    this._debris.splice(index, 1)
+    body.group.attach(object)
   }
 
   // Columbia enters its lunar parking orbit. The CSM leaves the stack but —

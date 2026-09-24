@@ -29,54 +29,44 @@ import * as THREE from 'three'
 //    change (setPhase) and for the return glide out of inspect mode
 //  - shake: camera shake amplitude in meters while this phase is active,
 //    multiplied by the choreography-driven shake gain (engines on/off)
+// The flight camera's fixed offset from the focus point: the liftoff shot's
+// viewing direction, (0.41, 0.2, 0.89), at a single distance of 60 units —
+// close enough that the 7 m lander still reads, far enough that the current
+// stage of the full stack is framed.
+export const FLIGHT_CAMERA_OFFSET = [24.6, 12, 53.4]
+
 export const CAMERA_PHASES = [
   { position: [60, 64, 270], target: [0, 62, 0] }, // 0: pad, countdown
   { position: [30, 25, 70], target: [0, 20, 0], shake: 0.35 }, // 1: ignition
   { position: [70, 90, 150], target: [0, 55, 0], shake: 0.55, duration: 1600 }, // 2: liftoff, tower clear
-  // 3: Max-Q / S-IC ascent — low hero chase, slightly under the stack
-  { frame: 'rocket', focusHeight: 55, position: [85, -12, 175], target: [0, 6, 0], shake: 0.85, duration: 2800 },
-  // 4: S-IC sep / S-II ignition — wide side shot, aimed a touch below the
-  // focus so the spent stage tumbles down through frame
-  { frame: 'rocket', focusHeight: 58, position: [115, -12, 150], target: [0, -8, 0], shake: 0.3, duration: 3200 },
-  // 5: S-II ascent — closer 3/4 on the remaining stack, aimed so the nose
-  // and the escape-tower jettison path stay in frame, slow orbit
-  { frame: 'rocket', focusHeight: 76, position: [55, 14, 95], target: [0, 8, 0], shake: 0.3, duration: 3000 },
-  // 6: S-IVB burn / TLI — tight low-behind shot, plume in the foreground
-  { frame: 'rocket', focusHeight: 88, position: [32, -34, 58], target: [0, -4, 0], shake: 0.3, duration: 3000 },
-  // Phases 7-12 are framed against the fixed Earth-Moon line in
-  // StagingChoreography (MOON_LINE): the camera sits on the sunward side of
-  // the line and looks along it, ~25 deg off, at whichever body the phase is
-  // about - so that body is in frame AND shows its lit face.
+  // 3-13: ONE camera for the whole flight. Same direction, same distance,
+  // every phase — the only thing that changes is focusHeight, which walks up
+  // the stack to whatever stage is current, so the camera slides along with
+  // it. There used to be a separately tuned pose per phase, and the glide
+  // between two of them cut a straight line past the vehicle: every phase
+  // change zoomed in, back out, and swung the view round. With one pose there
+  // is nothing to glide between. Earth and the Moon are placed in front of
+  // this camera (StagingChoreography's EARTH_LINE / MOON_LINE), not the
+  // other way round.
   //
-  // 7: transposition & docking — side-on to the stack (which the post-TLI
-  // manoeuvre turns square to the line), looking back along the line so
-  // Earth hangs behind the docking
-  { frame: 'rocket', focusHeight: 100, position: [59, 3, -11], target: [0, 2, 0], duration: 3200 },
-  // 8: lunar approach — the stack aims engine-first along the line at the
-  // Moon; the camera rides behind and above it, looking past the stack at
-  // the Moon swelling ahead
-  { frame: 'rocket', focusHeight: 98, position: [-30, 24, 49], target: [0, -4, 0], duration: 3000 },
-  // 9: powered descent / touchdown — high over the LM, looking down between
-  // where the Moon starts (ahead, on the line) and where it ends (underfoot),
-  // so it stays in frame the whole way as it swings under and rises to meet
-  // the LM
-  { frame: 'rocket', focusHeight: 93, position: [-20, 34, 22], target: [0, -8, 0], duration: 3400 },
-  // 10: Tranquility Base — low tableau, but kept a few meters ABOVE the
-  // sphere's grazing curvature (the surface top sits ~focus+81; a camera at
-  // focus-1 ends up underground and the Moon front-face culls away)
-  { frame: 'rocket', focusHeight: 90, position: [21, 7, 34], target: [0, 0, 0], duration: 3800 },
-  // 11: lunar liftoff & rendezvous — above and behind the ascent stage,
-  // looking down past it at the Moon falling away below; Columbia comes in
-  // along the docking axis from ahead
-  { frame: 'rocket', focusHeight: 90, position: [16, 26, 31], target: [0, 5, 0], duration: 3200 },
-  // 12: trans-Earth injection — the SPS end points back along the line at
-  // the Moon; the camera looks the same way, so the burn streams toward the
-  // Moon filling the frame behind as it falls away
-  { frame: 'rocket', focusHeight: 99, position: [-25, 20, 41], target: [0, 0, 0], duration: 3000 },
-  // 13: reentry & splashdown — on the capsule with pose shake armed (the
-  // choreography's vibe gain turns it into plasma buffeting), aimed a touch
-  // high so the deployed mains stay inside the frame at the end
-  { frame: 'rocket', focusHeight: 97, position: [27, 3, 50], target: [0, 9, 0], shake: 0.5, duration: 3400 },
+  // The direction continues the liftoff shot's (phase 2), so leaving the pad
+  // is the one and only change of view.
+  ...[
+    { focusHeight: 55, shake: 0.85, duration: 2800 }, // 3: Max-Q / S-IC ascent
+    { focusHeight: 58, shake: 0.3, duration: 3200 }, // 4: S-IC sep / S-II ignition
+    { focusHeight: 76, shake: 0.3, duration: 3000 }, // 5: S-II ascent, tower jettison
+    { focusHeight: 88, shake: 0.3, duration: 3000 }, // 6: S-IVB burn / TLI
+    { focusHeight: 100, duration: 3200 }, // 7: transposition & docking
+    { focusHeight: 98, duration: 3000 }, // 8: lunar approach
+    { focusHeight: 93, duration: 3400 }, // 9: powered descent / touchdown
+    // 10: Tranquility Base — the offset's height keeps the camera above the
+    // sphere's grazing curvature (a camera at focus-1 ends up underground and
+    // the Moon front-face culls away)
+    { focusHeight: 90, duration: 3800 },
+    { focusHeight: 90, duration: 3200 }, // 11: lunar liftoff & rendezvous
+    { focusHeight: 99, duration: 3000 }, // 12: trans-Earth injection
+    { focusHeight: 97, shake: 0.5, duration: 3400 }, // 13: reentry & splashdown
+  ].map((pose) => ({ frame: 'rocket', position: FLIGHT_CAMERA_OFFSET, target: [0, 0, 0], ...pose })),
 ]
 
 export const DEFAULT_TRANSITION_DURATION = 1200
