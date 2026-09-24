@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { ExhaustSystem, EXHAUST_PRESETS } from '../particles/ExhaustSystem.js'
 import { SeparationFlash } from '../particles/SeparationFlash.js'
 import { Parachutes } from '../rocket/Parachutes.js'
-import { bodyMark, groundMark, EARTH_BODY, MOON_BODY } from '../missionSpace.js'
+import { bodyMark, groundMark, lerpBodyMark, EARTH_BODY, MOON_BODY } from '../missionSpace.js'
 import { PHASES } from '../../data/phases.js'
 
 // Powered ascent, staging, and the trans-lunar arc: phases 3-9, from Max-Q
@@ -121,6 +121,10 @@ function buildCsmGlint() {
 // position) and only eases once the vehicle is back to steady flight —
 // so apparent distance never visibly shifts at the moment hardware
 // separates. holdT/endT are fractions of the beat's total duration.
+function easeOutCubic(t) {
+  return 1 - (1 - t) ** 3
+}
+
 function holdThenEase(holdT, endT = 1) {
   return (t) => easeInOutCubic(Math.max(0, Math.min(1, (t - holdT) / (endT - holdT))))
 }
@@ -165,28 +169,56 @@ const aim = ([x, y, z]) => {
   return { tilt: Math.acos(y / len), yaw: Math.atan2(-z, x) }
 }
 
-// Shared per-phase pointing directions (also feed the env bodyMark calls, so
-// the stack points at the RENDERED body, not an approximation of it):
-//  - Outbound coast (7, 8): +Y — the SPS engine end, since the transposition
-//    flip puts the bell forward — aims at the Moon: the stack flies engine-
-//    first toward its destination, exactly the attitude the real CSM/LM
-//    needed for the LOI braking burn (beat 8's SPS burn streams its plume
-//    toward the Moon growing ahead).
-//  - Return (12): +Y aims AWAY from Earth, i.e. the CM apex end leads home
-//    while the SPS points back at the Moon — the real TEI attitude (burn
-//    accelerates toward Earth; reentry then only needs the blunt-end swing).
-const MOON_DIR_7 = [0.55, 0.35, 0.75]
-const MOON_DIR_8 = [0.62, -0.42, -0.62]
-const EARTH_DIR_12 = [-0.63, -0.16, -0.76]
-const AIM_7 = aim(MOON_DIR_7)
-const AIM_8 = aim(MOON_DIR_8)
-const AIM_12 = aim([-EARTH_DIR_12[0], -EARTH_DIR_12[1], -EARTH_DIR_12[2]])
+// ONE Earth-Moon line for the whole flight, fixed in world space.
+//
+// This used to be a per-phase set of hand-picked directions (Moon at +z in
+// phase 7, -z in 8, Earth flipping sides again for 12), so every phase change
+// swung the bodies across the sky. Now the Moon always sits along MOON_LINE
+// and Earth along EARTH_LINE = -MOON_LINE: outbound, Earth is behind and the
+// Moon ahead; at the Moon, Earth hangs in that same patch of sky; on the way
+// home it is ahead again. Only distances change between phases - the bodies
+// grow and shrink, they do not wander. The lunar-surface phases are the one
+// exception, where the Moon is underfoot as terrain.
+//
+// The line is chosen against LIGHT_SPACE (nearly perpendicular to it) so that
+// both an Earth-facing and a Moon-facing camera see a lit, gibbous body, and
+// with the Moon on the -z side so the default +z-side cameras face it.
+const MOON_LINE = [0.803, -0.199, -0.562]
+const EARTH_LINE = [-MOON_LINE[0], -MOON_LINE[1], -MOON_LINE[2]]
+
+// From phase 7 to 12 the vehicle does NOT travel. It used to move hundreds of
+// units between phases, and the camera - a smoothed chase - lagged far enough
+// behind to lose it (TEI played for seconds on an empty frame). The journey
+// is carried entirely by the bodies around it; burns read through the plume.
+const FLIGHT_POS = [760, 2510, 0]
+
+// Attitudes, as stack +Y directions (see aim()):
+//  - 7, T&D: square to the Earth-Moon line, so the docking plays side-on
+//    with Earth behind it. Reached by a real post-TLI attitude manoeuvre
+//    (39 deg from the TLI attitude) BEFORE the SLA opens.
+//  - 8, LOI: +Y (the SPS end, forward after the transposition flip) along
+//    MOON_LINE - engine-first into the braking burn.
+//  - 11, docked in lunar orbit: pitched halfway between vertical and the
+//    Moon line, reached during the ascent burn.
+//  - 12, TEI: +Y along MOON_LINE again, i.e. the CM apex leads home while the
+//    SPS points back at the Moon - the real TEI attitude.
+const ATT_7 = [0.499, 0.741, 0.45]
+const AIM_7 = aim(ATT_7)
+const AIM_8 = aim(MOON_LINE)
+const AIM_11 = aim([0.634, 0.633, -0.444])
+const AIM_12 = aim(MOON_LINE)
+
 // The Pacific recovery zone only exists for phase 13 — every other phase
 // holds it at the splash site with opacity 0 so the reveal is a fade under
 // the descending CM. The site sits at -X of the pad origin because the
 // return leg flies -X (back past where it left from) — see SETTLED[12/13].
-const SPLASH_SITE_X = -400
-const OCEAN_HIDDEN = [SPLASH_SITE_X, 40, 0, 1, 0]
+//
+// SPLASH_DY lifts the whole recovery scene (ocean, ground-Earth, capsule) by
+// the same amount the TEI position was raised when the flight stopped
+// travelling, so the 12->13 dive keeps the exact vector it was tuned with.
+const SPLASH_SITE_X = 60
+const SPLASH_DY = 910
+const OCEAN_HIDDEN = [SPLASH_SITE_X, 40 + SPLASH_DY, 0, 1, 0]
 
 // Earth as the ground: a fixed full-ground-radius sphere whose top surface
 // sits just below pad grade (LaunchPad GRADE_Y = -22 — the island terrain,
@@ -263,44 +295,40 @@ const SETTLED = [
   { pos: [110, 950, 0], tilt: 27 * DEG, burn: 'S-II', sky: 0.85, pad: 0, stretch: 1.5, detached: ['S-IC'], csm: 'stowed', lm: false, env: ENV_ASCENT[4] },
   { pos: [300, 1550, 0], tilt: 45 * DEG, burn: 'S-II', sky: 1, pad: 0, stretch: 1.8, detached: ['S-IC', 'LES'], csm: 'stowed', lm: false, env: ENV_ASCENT[5] },
   { pos: [560, 2150, 0], tilt: 63 * DEG, burn: 'S-IVB', sky: 1, pad: 0, stretch: 1.7, detached: ['S-IC', 'LES', 'S-II'], csm: 'stowed', lm: false, env: ENV_ASCENT[6] },
-  // 7: T&D, ~22,000 km out. Earth settles from the receding ground-globe to
-  // its true 13°-radius marble behind-below the stack (in the settled shot's
-  // lower frame); the Moon dot slides to dead ahead on the +X axis.
+  // 7: T&D, ~22,000 km out. Earth recedes from the ground-globe to its true
+  // 13 deg-radius marble behind the stack, the Moon a dot on the far side of
+  // the same line.
   {
-    pos: [760, 2510, 0], tilt: AIM_7.tilt, yaw: AIM_7.yaw, burn: null, sky: 1, pad: 0, stretch: 1,
+    pos: FLIGHT_POS, tilt: AIM_7.tilt, yaw: AIM_7.yaw, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'docked', lm: true,
     env: {
-      earth: bodyMark(EARTH_BODY, [760, 2510, 0], [-MOON_DIR_7[0], -MOON_DIR_7[1], -MOON_DIR_7[2]], PHASES[7].distEarthKm),
-      moon: bodyMark(MOON_BODY, [760, 2510, 0], MOON_DIR_7, PHASES[7].distMoonKm),
+      earth: bodyMark(EARTH_BODY, FLIGHT_POS, EARTH_LINE, PHASES[7].distEarthKm),
+      moon: bodyMark(MOON_BODY, FLIGHT_POS, MOON_LINE, PHASES[7].distMoonKm),
       ocean: OCEAN_HIDDEN, light: LIGHT_SPACE,
     },
   },
-  // 8: lunar orbit insertion, 100 km up — the Moon is terrain-close ahead-
-  // below (ground-radius clamp), Earth a 2°-wide marble far behind on the
-  // opposite side of the axis.
+  // 8: lunar orbit insertion, 100 km up — the Moon terrain-close ahead along
+  // the line (ground-radius clamp), Earth a 2 deg marble far behind on it.
   {
-    pos: [860, 2560, 0], tilt: AIM_8.tilt, yaw: AIM_8.yaw, burn: null, sky: 1, pad: 0, stretch: 1,
+    pos: FLIGHT_POS, tilt: AIM_8.tilt, yaw: AIM_8.yaw, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'docked', lm: true,
     env: {
-      earth: bodyMark(EARTH_BODY, [860, 2560, 0], [-MOON_DIR_8[0], -MOON_DIR_8[1], -MOON_DIR_8[2]], PHASES[8].distEarthKm),
-      moon: bodyMark(MOON_BODY, [860, 2560, 0], MOON_DIR_8, PHASES[8].distMoonKm),
+      earth: bodyMark(EARTH_BODY, FLIGHT_POS, EARTH_LINE, PHASES[8].distEarthKm),
+      moon: bodyMark(MOON_BODY, FLIGHT_POS, MOON_LINE, PHASES[8].distMoonKm),
       ocean: OCEAN_HIDDEN, light: LIGHT_SPACE,
     },
   },
   // 9: the Moon as standing terrain — full ground-radius sphere whose top
-  // surface sits exactly under the LM's footpads (stack-local y≈91) at the
-  // settled pos; the 8->9 lerp path keeps that surface below the descending
-  // vehicle the whole way (env ease settles at 78%, before motion's 86%).
-  // Earth from the surface: the real ~2° marble, high in the -X sky like it
-  // hung over Tranquility Base — and on the +z (camera) side, because
-  // LIGHT_SURFACE puts the sun low at -z: an Earth opposite the sun renders
-  // as an unlit sliver.
+  // surface sits exactly under the LM's footpads (stack-local y=91) at the
+  // flight position. Earth stays on its line: low in the sky over the
+  // horizon, on the camera side (LIGHT_SURFACE puts the sun low at -z, and
+  // an Earth opposite the sun would render as an unlit sliver).
   {
-    pos: [980, 2080, 0], tilt: 0, burn: null, sky: 1, pad: 0, stretch: 1,
+    pos: FLIGHT_POS, tilt: 0, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'gone', lm: true,
     env: {
-      earth: bodyMark(EARTH_BODY, [980, 2080, 0], [-0.55, 0.62, 0.56], PHASES[9].distEarthKm),
-      moon: groundMark(MOON_BODY, 980, 0, 2171),
+      earth: bodyMark(EARTH_BODY, FLIGHT_POS, EARTH_LINE, PHASES[9].distEarthKm),
+      moon: groundMark(MOON_BODY, FLIGHT_POS[0], FLIGHT_POS[2], FLIGHT_POS[1] + 91),
       ocean: OCEAN_HIDDEN, light: LIGHT_SURFACE,
     },
   },
@@ -308,60 +336,55 @@ const SETTLED = [
   // phase exists as a held tableau (camera re-frame + HUD beat), so there is
   // deliberately no BEATS[10] entry.
   {
-    pos: [980, 2080, 0], tilt: 0, burn: null, sky: 1, pad: 0, stretch: 1,
+    pos: FLIGHT_POS, tilt: 0, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB'], csm: 'gone', lm: true,
     env: {
-      earth: bodyMark(EARTH_BODY, [980, 2080, 0], [-0.55, 0.62, 0.56], PHASES[10].distEarthKm),
-      moon: groundMark(MOON_BODY, 980, 0, 2171),
+      earth: bodyMark(EARTH_BODY, FLIGHT_POS, EARTH_LINE, PHASES[10].distEarthKm),
+      moon: groundMark(MOON_BODY, FLIGHT_POS[0], FLIGHT_POS[2], FLIGHT_POS[1] + 91),
       ocean: OCEAN_HIDDEN, light: LIGHT_SURFACE,
     },
   },
   // 11: ascent & rendezvous — the ascent stage climbs off the descent-stage
   // launch pad (abandoned onto the Moon group so it recedes WITH the
   // terrain), then Columbia rejoins and docks. Settled = docked in orbit,
-  // Moon underfoot, Earth still the high -X marble.
+  // the Moon below and a little ahead, Earth still on its line.
   {
-    pos: [1080, 2700, 0], tilt: 62 * DEG, burn: null, sky: 1, pad: 0, stretch: 1,
+    pos: FLIGHT_POS, tilt: AIM_11.tilt, yaw: AIM_11.yaw, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB', 'LM-DS'], csm: 'docked', lm: true,
     env: {
-      earth: bodyMark(EARTH_BODY, [1080, 2700, 0], [-0.55, 0.64, 0.54], PHASES[11].distEarthKm),
-      moon: bodyMark(MOON_BODY, [1080, 2700, 0], [0.1, -0.97, -0.22], PHASES[11].distMoonKm),
+      earth: bodyMark(EARTH_BODY, FLIGHT_POS, EARTH_LINE, PHASES[11].distEarthKm),
+      moon: bodyMark(MOON_BODY, FLIGHT_POS, [0.3, -1, -0.5], PHASES[11].distMoonKm),
       ocean: OCEAN_HIDDEN, light: LIGHT_SPACE,
     },
   },
-  // 12: trans-Earth injection. The world path now flies -X — back the way it
-  // came — so Earth (a 1°-radius dot at 385,000 km: TEI happens AT the Moon)
-  // sits ahead on the -X axis and the still-huge Moon falls behind at +X.
+  // 12: trans-Earth injection, 3,200 km out. Earth a dot ahead on its line,
+  // the still-huge Moon falling away behind on its own.
   {
-    // (pos.y kept moderate so the 12->13 reentry dive stays within what the
-    // camera chase can hold in frame.)
-    pos: [300, 1600, 0], tilt: AIM_12.tilt, yaw: AIM_12.yaw, burn: null, sky: 1, pad: 0, stretch: 1,
+    pos: FLIGHT_POS, tilt: AIM_12.tilt, yaw: AIM_12.yaw, burn: null, sky: 1, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB', 'LM-DS', 'LM'], csm: 'docked', lm: true,
     env: {
-      earth: bodyMark(EARTH_BODY, [300, 1600, 0], EARTH_DIR_12, PHASES[12].distEarthKm),
-      // +z depth: a 180° look-back keeps the camera's z side, so the Moon
-      // needs to sit there to fill the rear view.
-      moon: bodyMark(MOON_BODY, [300, 1600, 0], [0.63, 0.16, 0.74], PHASES[12].distMoonKm),
+      earth: bodyMark(EARTH_BODY, FLIGHT_POS, EARTH_LINE, PHASES[12].distEarthKm),
+      moon: bodyMark(MOON_BODY, FLIGHT_POS, MOON_LINE, PHASES[12].distMoonKm),
       ocean: OCEAN_HIDDEN, light: LIGHT_SPACE,
     },
   },
   // 13: reentry & splashdown — SM jettisoned, blunt-end-forward entry, sky
   // fades back to blue while the ocean fades in; settles bobbing on the
   // water under deployed mains. pos.y puts the CM's heat shield at the
-  // ocean surface (y=40) given the CM's ~97m stack-local height. Arrival
-  // mirrors departure: Earth comes back as GROUND (sphere top at the ocean
-  // surface under the splash site — the ocean disc is its local terrain
-  // patch, same role the pad played), and the Moon is once again the tiny
-  // daytime-sky dot it was on the pad.
+  // ocean surface given the CM's ~97m stack-local height. Arrival mirrors
+  // departure: Earth comes back as GROUND (sphere top at the ocean surface
+  // under the splash site — the ocean disc is its local terrain patch, same
+  // role the pad played), and the Moon is once again the small daytime-sky
+  // dot it was on the pad. Everything here is lifted by SPLASH_DY.
   {
-    pos: [SPLASH_SITE_X, -58, 0], tilt: 0, burn: null, sky: 0, pad: 0, stretch: 1,
+    pos: [SPLASH_SITE_X, -58 + SPLASH_DY, 0], tilt: 0, burn: null, sky: 0, pad: 0, stretch: 1,
     detached: ['S-IC', 'LES', 'S-II', 'SLA', 'S-IVB', 'LM-DS', 'LM', 'SM'], csm: 'cm', lm: true, chutes: true,
     env: {
-      // Sphere top tucked below the ocean disc (y=40) so the disc is the
-      // water surface and the sphere takes over past its 3200 rim.
-      earth: groundMark(EARTH_BODY, SPLASH_SITE_X, 0, 34),
-      moon: bodyMark(MOON_BODY, [SPLASH_SITE_X, -58, 0], [0.6, 0.55, -0.5], PHASES[13].distMoonKm),
-      ocean: [SPLASH_SITE_X, 40, 0, 1, 1], light: [2600, 1600, 1000],
+      // Sphere top tucked below the ocean disc so the disc is the water
+      // surface and the sphere takes over past its 3200 rim.
+      earth: groundMark(EARTH_BODY, SPLASH_SITE_X, 0, 34 + SPLASH_DY),
+      moon: bodyMark(MOON_BODY, [SPLASH_SITE_X, -58 + SPLASH_DY, 0], [0.6, 0.55, -0.5], PHASES[13].distMoonKm),
+      ocean: [SPLASH_SITE_X, 40 + SPLASH_DY, 0, 1, 1], light: [2600, 1600, 1000],
     },
   },
 ]
@@ -513,30 +536,20 @@ const BEATS = {
   // dock nose-to-nose; and finally the spent S-IVB (carrying the SLA's fixed
   // aft ring) drifts away below — the extraction, seen from the LM's side.
   7: {
-    duration: 17.5,
+    duration: 19.3,
     // The S-IVB is still burning off its last 0.9s of TLI at this beat's
     // start (extinguish() below) — that's the whole position move. The
     // vehicle then holds dead still in world space for the rest of the
-    // beat (16.6s) while the SLA/CSM/S-IVB choreography plays out in front
-    // of a stationary camera — no engine fires again until beat 8's SPS.
-    progress: holdThenEase(0, 0.9 / 17.5),
-    // Environment (Earth settling to its marble, Moon fade-in, sun swing)
-    // settles by ~55% so the backdrop is fully in while the docking plays out
-    // in front of it.
-    ease: (t) => easeInOutCubic(Math.min(t / 0.55, 1)),
-    // Earth/Moon distance is a SEPARATE, earlier curve: held flat through
-    // the SLA petal jettison (2.9-4.2s) with a buffer, then eases and
-    // settles by ~9.6s — matching when `ease` above finishes (55%) and the
-    // camera itself goes fully static. It used to settle much later (14s,
-    // well before the S-IVB departs at 16.3s so THAT jettison wouldn't
-    // visibly move either body), which was fine while the vehicle was still
-    // gliding into place the whole time — but now that position freezes
-    // early (0.9s, see progress above) the camera stops moving by ~9.6s,
-    // and Earth/Moon would keep sliding across an otherwise dead-still frame
-    // for another 4+ seconds, reading as them drifting on their own for no
-    // reason. Settling at the same time the camera does fixes that; 9.6s is
-    // still miles clear of the 16.3s S-IVB jettison.
-    envEase: holdThenEase(5.0 / 17.5, 9.6 / 17.5),
+    // beat while the SLA/CSM/S-IVB choreography plays out in front of a
+    // stationary camera — no engine fires again until beat 8's SPS.
+    progress: holdThenEase(0, 0.9 / 19.3),
+    // The post-TLI attitude manoeuvre, 1.2-4.4s: the S-IVB turns the stack
+    // square to the Earth-Moon line while Earth recedes behind it, and ALL
+    // of it is finished before the SLA pyros fire at 4.7s. From then on
+    // nothing moves but the hardware being handled: the stack holds its
+    // attitude and the backdrop holds still through the whole docking.
+    ease: holdThenEase(1.2 / 19.3, 4.4 / 19.3),
+    envEase: holdThenEase(1.0 / 19.3, 4.4 / 19.3),
     valid: (c) => !c._detached.has('S-IVB') && c._csmState === 'stowed',
     events: [
       {
@@ -548,7 +561,7 @@ const BEATS = {
       },
       { at: 2.0, run: (c) => c._setVibe(0) },
       {
-        at: 2.9,
+        at: 4.7,
         run: (c, instant) => {
           // Pyro: the joints between the petals sever and the panels start
           // hinging outward — which is also the moment the LM first shows.
@@ -556,9 +569,9 @@ const BEATS = {
           if (!instant) c._openSlaPanels()
         },
       },
-      { at: 4.2, run: (c, instant) => c._releaseSlaPanels(instant) },
+      { at: 6.0, run: (c, instant) => c._releaseSlaPanels(instant) },
       {
-        at: 5.2,
+        at: 7.0,
         run: (c, instant) => {
           // CSM pulls ahead of the stack to get room for the flip.
           if (instant) return // dock event applies the final transform
@@ -571,7 +584,7 @@ const BEATS = {
         },
       },
       {
-        at: 8.2,
+        at: 10.0,
         run: (c, instant) => {
           if (instant) return
           const csm = c._jettisonable['CSM']?.object
@@ -582,7 +595,7 @@ const BEATS = {
         },
       },
       {
-        at: 12.2,
+        at: 14.0,
         run: (c, instant) => {
           if (instant) return
           const csm = c._jettisonable['CSM']?.object
@@ -594,7 +607,7 @@ const BEATS = {
         },
       },
       {
-        at: 15.4,
+        at: 17.2,
         run: (c, instant) => {
           // Contact: instant-safe hard dock — snaps whatever the tweens
           // reached to the exact docked transform.
@@ -613,7 +626,7 @@ const BEATS = {
         },
       },
       {
-        at: 16.3,
+        at: 18.1,
         run: (c, instant) =>
           c._separate('S-IVB', instant, {
             // The real S-IVB made a lateral evasive maneuver and went on to
@@ -637,14 +650,18 @@ const BEATS = {
   // a marble; mid-phase the SPS lights for the braking burn — engine-first,
   // which the transposition flip conveniently already arranged.
   8: {
-    duration: 9.5,
-    // Coasting toward the Moon, dead still, until the SPS lights (0.8s);
-    // frozen again once it cuts off (6.8s) for the rest of the approach.
-    progress: holdThenEase(0.8 / 9.5, 6.8 / 9.5),
+    duration: 11,
+    // Coasting toward the Moon, dead still, until the SPS lights (3.2s);
+    // frozen again once it cuts off (8.4s) for the rest of the approach.
+    progress: holdThenEase(3.2 / 11, 8.4 / 11),
+    // Turn engine-first onto the Moon line (0.2-3.0s) BEFORE the burn, not
+    // during it; the Moon then swells ahead through the approach and burn.
+    ease: holdThenEase(0.2 / 11, 3.0 / 11),
+    envEase: holdThenEase(0.4 / 11, 8.4 / 11),
     valid: (c) => c._csmState === 'docked' && c._detached.has('S-IVB'),
     events: [
       {
-        at: 0.8,
+        at: 3.2,
         run: (c, instant) => {
           c._exhausts['SPS'].ignite()
           c._exhausts['SPS'].setStretch(1)
@@ -653,7 +670,7 @@ const BEATS = {
         },
       },
       {
-        at: 6.8,
+        at: 8.4,
         run: (c) => {
           c._exhausts['SPS'].extinguish()
           c._setVibe(0)
@@ -730,7 +747,10 @@ const BEATS = {
     // (8.6s) — Columbia's rendezvous/dock afterward is all relative motion
     // on the CSM's own tweens, not the vehicle translating.
     progress: holdThenEase(0.6 / 18, 8.6 / 18),
-    ease: holdThenEase(0.35),
+    // Pitch-over and the Moon falling away both belong to the ascent burn
+    // (0.6-8.6s). They used to run on to the very end of the beat, so the
+    // stack was still turning while Columbia docked with it.
+    ease: holdThenEase(0.6 / 18, 8.6 / 18),
     valid: (c) =>
       c._csmState === 'gone' && !c._detached.has('LM-DS') && !c._detached.has('LM'),
     events: [
@@ -759,21 +779,27 @@ const BEATS = {
         },
       },
       {
-        at: 10.2,
+        at: 8.8,
         run: (c, instant) => {
-          // Columbia rejoins: restored into the stack frame well ahead of
-          // the ascent stage, then closes to just short of contact. The dock
-          // event below is the instant-safe hard set.
+          // Columbia rejoins along the docking axis from well out of frame
+          // and brakes into contact: fast at first, crawling at the end, the
+          // way a final approach reads. It used to be restored only 46 units
+          // out - inside the shot - so it simply appeared. The dock event
+          // below is the instant-safe hard set.
           if (instant) return
           c._restore('CSM')
           const csm = c._jettisonable['CSM']?.object
           if (!csm) return
           csm.rotation.set(0, 0, Math.PI)
-          const fromY = c._dockLocalY + 46
+          const fromY = c._dockLocalY + 170
           csm.position.y = fromY
-          c._addTween(5.0, (t) => {
-            csm.position.y = THREE.MathUtils.lerp(fromY, c._dockLocalY + 1.2, t)
-          })
+          c._addTween(
+            6.4,
+            (t) => {
+              csm.position.y = THREE.MathUtils.lerp(fromY, c._dockLocalY + 1.2, t)
+            },
+            easeOutCubic,
+          )
         },
       },
       {
@@ -805,6 +831,9 @@ const BEATS = {
     // the SPS burn (3.0s-9.6s) is the whole move, same window the env
     // channel below tracks.
     progress: holdThenEase(3.0 / 12, 9.6 / 12),
+    // Once Eagle is clear, the stack turns onto the Moon line (1.4-2.9s) so
+    // the SPS fires from a settled attitude, not mid-turn.
+    ease: holdThenEase(1.4 / 12, 2.9 / 12),
     // Held flat through the Eagle jettison (0.9s); Earth/Moon only start
     // trading places once the SPS actually lights (3.0s) for the real TEI
     // burn, settling by cutoff (9.6s) — the distance change tracks the burn,
@@ -1291,10 +1320,18 @@ export class StagingChoreography {
     const padT = Math.min(1, easeT / 0.4)
     this._setPadOpacity(THREE.MathUtils.lerp(from.pad, to.pad, padT))
 
+    // Earth and the Moon blend AROUND the vehicle - direction, gap and size
+    // - not along a straight line through space (see lerpBodyMark); ocean
+    // and light are plain values and lerp as numbers.
     const now = this._envNow
     for (const key of Object.keys(now)) {
       const a = from.env[key]
       const b = to.env[key]
+      if (key === 'earth' || key === 'moon') {
+        const body = key === 'earth' ? EARTH_BODY : MOON_BODY
+        now[key] = lerpBodyMark(body, a, from.pos, b, to.pos, envEaseT)
+        continue
+      }
       for (let i = 0; i < now[key].length; i += 1) {
         now[key][i] = THREE.MathUtils.lerp(a[i], b[i], envEaseT)
       }
@@ -1321,8 +1358,8 @@ export class StagingChoreography {
   // doesn't cover (the CSM's transposition moves). apply() receives eased
   // 0-1; _flushTweens() jumps everything to its end state so beats can be
   // fast-forwarded safely.
-  _addTween(duration, apply) {
-    const tween = { elapsed: 0, duration, apply }
+  _addTween(duration, apply, easing = easeInOutCubic) {
+    const tween = { elapsed: 0, duration, apply, easing }
     this._tweens.push(tween)
     return tween
   }
@@ -1337,7 +1374,7 @@ export class StagingChoreography {
       const tween = this._tweens[i]
       tween.elapsed += dt
       const t = Math.min(tween.elapsed / tween.duration, 1)
-      tween.apply(easeInOutCubic(t))
+      tween.apply(tween.easing(t))
       if (t >= 1) this._tweens.splice(i, 1)
     }
   }
@@ -1513,7 +1550,13 @@ export class StagingChoreography {
       csm.quaternion.copy(trackQuat)
     }
 
-    if (this._csmGlint) this._csmGlint.position.copy(csm.position)
+    // The glint is sized to read as a point from thousands of units away; while
+    // Columbia is still backing off the LM's roof, right by the camera, it
+    // would be a huge blown-out disc. It shows only once the CSM is on track.
+    if (this._csmGlint) {
+      this._csmGlint.position.copy(csm.position)
+      this._csmGlint.visible = blend >= 1
+    }
   }
 
   // SLA pyro fires: the four petals start hinging outward on spring

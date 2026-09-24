@@ -107,3 +107,51 @@ export function bodyMark(body, vehiclePos, dir, surfaceDistKm, opacity = 1) {
 export function groundMark(body, siteX, siteZ, topY, opacity = 1) {
   return [siteX, topY - body.groundRadius, siteZ, body.groundRadius / body.baseRadius, opacity]
 }
+
+// Blends two env tuples for the same body AROUND the vehicle instead of in a
+// straight line through space. Each end is re-expressed relative to its own
+// phase's vehicle position as (direction, surface gap, rendered radius); the
+// direction slerps, the gap lerps, the radius lerps in log space (so
+// apparent size changes evenly), and the result is placed from the anchor
+// blended the same way. A body therefore swings round and grows or shrinks -
+// it never cuts across the scene or through the vehicle, which straight-line
+// blending did whenever two phases put it on different sides. Identical ends
+// (Earth as fixed ground through the ascent) are returned untouched, so a
+// body that should stay put in the world does.
+export function lerpBodyMark(body, a, anchorA, b, anchorB, t) {
+  if (a.every((value, i) => value === b[i])) return a.slice()
+  const rel = (tuple, anchor) => {
+    const dx = tuple[0] - anchor[0]
+    const dy = tuple[1] - anchor[1]
+    const dz = tuple[2] - anchor[2]
+    const dist = Math.hypot(dx, dy, dz) || 1
+    const radius = tuple[3] * body.baseRadius
+    return { dir: [dx / dist, dy / dist, dz / dist], gap: dist - radius, radius }
+  }
+  const A = rel(a, anchorA)
+  const B = rel(b, anchorB)
+
+  // Slerp of unit vectors; falls back to a normalized lerp near-parallel.
+  const cos = Math.min(1, Math.max(-1, A.dir[0] * B.dir[0] + A.dir[1] * B.dir[1] + A.dir[2] * B.dir[2]))
+  const angle = Math.acos(cos)
+  let dir
+  if (angle < 1e-4) dir = A.dir
+  else {
+    const sin = Math.sin(angle)
+    const wa = Math.sin((1 - t) * angle) / sin
+    const wb = Math.sin(t * angle) / sin
+    dir = [0, 1, 2].map((i) => A.dir[i] * wa + B.dir[i] * wb)
+  }
+
+  const radius = Math.exp(Math.log(A.radius) * (1 - t) + Math.log(B.radius) * t)
+  const gap = A.gap + (B.gap - A.gap) * t
+  const anchor = [0, 1, 2].map((i) => anchorA[i] + (anchorB[i] - anchorA[i]) * t)
+  const centerDist = gap + radius
+  return [
+    anchor[0] + dir[0] * centerDist,
+    anchor[1] + dir[1] * centerDist,
+    anchor[2] + dir[2] * centerDist,
+    radius / body.baseRadius,
+    a[4] + (b[4] - a[4]) * t,
+  ]
+}

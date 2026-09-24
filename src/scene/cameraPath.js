@@ -43,30 +43,36 @@ export const CAMERA_PHASES = [
   { frame: 'rocket', focusHeight: 76, position: [55, 14, 95], target: [0, 8, 0], shake: 0.3, duration: 3000 },
   // 6: S-IVB burn / TLI — tight low-behind shot, plume in the foreground
   { frame: 'rocket', focusHeight: 88, position: [32, -34, 58], target: [0, -4, 0], shake: 0.3, duration: 3000 },
-  // 7: transposition & docking — medium shot on the stack's top (the CSM's
-  // flip-and-return all happens around local y≈96-116), Earth looming behind
-  { frame: 'rocket', focusHeight: 100, position: [30, 4, 54], target: [0, 2, 0], duration: 3200 },
-  // 8: lunar approach — the stack now AIMS at the Moon (engine-first for the
-  // braking burn, see StagingChoreography's aim()), so the camera sits off
-  // the aim axis: behind-left-above, looking past the 3/4 stack at the Moon
-  // disc filling the frame ahead-below
-  { frame: 'rocket', focusHeight: 98, position: [-62, 14, 29], target: [0, -4, 0], duration: 3000 },
-  // 9: powered descent / touchdown — close orbit on the LM, slightly high
-  // so the surface rising to meet it stays in frame
-  { frame: 'rocket', focusHeight: 93, position: [20, 8, 34], target: [0, -3, 0], duration: 3400 },
+  // Phases 7-12 are framed against the fixed Earth-Moon line in
+  // StagingChoreography (MOON_LINE): the camera sits on the sunward side of
+  // the line and looks along it, ~25 deg off, at whichever body the phase is
+  // about - so that body is in frame AND shows its lit face.
+  //
+  // 7: transposition & docking — side-on to the stack (which the post-TLI
+  // manoeuvre turns square to the line), looking back along the line so
+  // Earth hangs behind the docking
+  { frame: 'rocket', focusHeight: 100, position: [59, 3, -11], target: [0, 2, 0], duration: 3200 },
+  // 8: lunar approach — the stack aims engine-first along the line at the
+  // Moon; the camera rides behind and above it, looking past the stack at
+  // the Moon swelling ahead
+  { frame: 'rocket', focusHeight: 98, position: [-30, 24, 49], target: [0, -4, 0], duration: 3000 },
+  // 9: powered descent / touchdown — high over the LM, looking down between
+  // where the Moon starts (ahead, on the line) and where it ends (underfoot),
+  // so it stays in frame the whole way as it swings under and rises to meet
+  // the LM
+  { frame: 'rocket', focusHeight: 93, position: [-20, 34, 22], target: [0, -8, 0], duration: 3400 },
   // 10: Tranquility Base — low tableau, but kept a few meters ABOVE the
   // sphere's grazing curvature (the surface top sits ~focus+81; a camera at
   // focus-1 ends up underground and the Moon front-face culls away)
   { frame: 'rocket', focusHeight: 90, position: [21, 7, 34], target: [0, 0, 0], duration: 3800 },
-  // 11: lunar liftoff & rendezvous — under the ascent stage looking up, so
-  // the climb reads and Columbia's approach comes down through frame
-  { frame: 'rocket', focusHeight: 90, position: [26, -8, 52], target: [0, 7, 0], duration: 3200 },
-  // 12: trans-Earth injection — the CSM aims its nose home (aim axis toward
-  // Earth at -X-z), so the camera hangs off that axis: a 3/4 over-the-nose
-  // view with the Earth dot ~27° off-center ahead. Do NOT put the offset
-  // back on the aim axis ([44,12,52] was almost exactly it) — that reads as
-  // a nose-on disc with Earth hidden behind the capsule.
-  { frame: 'rocket', focusHeight: 99, position: [40, 6, 17], target: [0, 0, 0], duration: 3000 },
+  // 11: lunar liftoff & rendezvous — above and behind the ascent stage,
+  // looking down past it at the Moon falling away below; Columbia comes in
+  // along the docking axis from ahead
+  { frame: 'rocket', focusHeight: 90, position: [16, 26, 31], target: [0, 5, 0], duration: 3200 },
+  // 12: trans-Earth injection — the SPS end points back along the line at
+  // the Moon; the camera looks the same way, so the burn streams toward the
+  // Moon filling the frame behind as it falls away
+  { frame: 'rocket', focusHeight: 99, position: [-25, 20, 41], target: [0, 0, 0], duration: 3000 },
   // 13: reentry & splashdown — on the capsule with pose shake armed (the
   // choreography's vibe gain turns it into plasma buffeting), aimed a touch
   // high so the deployed mains stay inside the frame at the end
