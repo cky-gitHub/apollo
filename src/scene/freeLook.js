@@ -86,7 +86,9 @@ export class FreeLookControl {
     if (this._touchDragging && event.pointerType === 'touch' && event.isPrimary) {
       const dx = event.clientX - this._lastX
       this._lastX = event.clientX
-      this.onOrbit(dx * AZIMUTH_TOUCH_SENSITIVITY, 0)
+      // Negated: the scene follows the finger (swipe right turns the rocket
+      // right), the same grab feel as OrbitControls' own drag-rotate.
+      this.onOrbit(-dx * AZIMUTH_TOUCH_SENSITIVITY, 0)
       return
     }
     if (!this._dragging) return
@@ -98,10 +100,10 @@ export class FreeLookControl {
     const dy = event.clientY - this._lastY
     this._lastX = event.clientX
     this._lastY = event.clientY
-    // Same sign convention as the trackpad wheel mapping above — verified
-    // against feel, not just theory: an inverted version of this shipped
-    // first and tested backwards on both axes.
-    this.onOrbit(dx * AZIMUTH_DRAG_SENSITIVITY, dy * POLAR_DRAG_SENSITIVITY)
+    // Horizontal is negated so the scene follows the pointer (drag right
+    // turns the rocket right), matching the touch swipe and OrbitControls'
+    // drag-rotate; the un-negated version read as inverted left/right.
+    this.onOrbit(-dx * AZIMUTH_DRAG_SENSITIVITY, dy * POLAR_DRAG_SENSITIVITY)
   }
 
   _onPointerUp() {

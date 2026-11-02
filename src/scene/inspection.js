@@ -146,10 +146,25 @@ export class InspectionController {
 
   _explodeShift() {
     const presentIds = this._presentStageIds()
+    // Standing on the pad (countdown / ignition) the bottom stage is resting
+    // on the ground, so it can't sink into it: anchor the lowest stage and let
+    // everything above it spread upward instead of expanding about the middle.
+    if (this._isOnGround()) {
+      const lowest = (ys) => Math.min(...ys)
+      return (
+        lowest(presentIds.map((id) => this._rawExplodedY(id))) -
+        lowest(presentIds.map((id) => this._stackY.get(id)))
+      )
+    }
     const mid = (ys) => (Math.min(...ys) + Math.max(...ys)) / 2
     const collapsedMid = mid(presentIds.map((id) => this._stackY.get(id)))
     const explodedMid = mid(presentIds.map((id) => this._rawExplodedY(id)))
     return explodedMid - collapsedMid
+  }
+
+  // Phases 0 (countdown) and 1 (ignition) have the vehicle sitting on the pad.
+  _isOnGround() {
+    return this.flowStore.getSnapshot().flow.phase <= 1
   }
 
   _explodedY(stageId) {
