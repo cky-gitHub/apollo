@@ -149,6 +149,74 @@
   color: var(--mc-text-mid);
 }
 
+/* Tappable / clickable HUD control (Launch everywhere; Next and Resume on
+   touch screens). The HUD root is pointer-events: none so the canvas keeps
+   its gestures; buttons opt back in. */
+.hud-button {
+  pointer-events: auto;
+  min-height: 44px;
+  padding: 0 1.15rem;
+  border: 1px solid var(--mc-hairline-strong);
+  border-radius: 2px;
+  background: var(--mc-panel-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-family: var(--mc-font-sans);
+  font-weight: 400;
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mc-text);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition:
+    border-color 0.25s ease,
+    color 0.25s ease;
+}
+
+.hud-button:focus-visible {
+  outline: 1px solid var(--mc-amber);
+  outline-offset: 3px;
+}
+
+@media (hover: hover) {
+  .hud-button:hover {
+    border-color: var(--mc-amber-dim);
+  }
+}
+
+.hud-button--launch {
+  min-width: 9rem;
+  border-color: var(--mc-amber-dim);
+  color: var(--mc-amber);
+  letter-spacing: 0.28em;
+  text-shadow: var(--mc-glow-sm);
+  animation: hud-launch-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes hud-launch-pulse {
+  0%,
+  100% {
+    border-color: var(--mc-amber-dim);
+    box-shadow: none;
+  }
+  50% {
+    border-color: var(--mc-amber);
+    box-shadow: 0 0 14px rgba(255, 182, 72, 0.25);
+  }
+}
+
+.hud-touch-tip {
+  font-family: var(--mc-font-sans);
+  font-weight: 300;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  color: var(--mc-text-dim);
+  text-align: center;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.75);
+}
+
 @keyframes hud-key-pulse {
   0%,
   100% {
@@ -243,7 +311,12 @@
   .hud-hint {
     left: 1.75rem;
     right: 1.75rem;
-    bottom: 7rem;
+    bottom: 8rem;
+    flex-direction: column;
     justify-content: center;
+  }
+
+  .hud-button {
+    min-width: 12rem;
   }
 }

@@ -2,6 +2,7 @@ const AZIMUTH_WHEEL_SENSITIVITY = 0.0025 // rad per wheel deltaX px (two-finger 
 const POLAR_WHEEL_SENSITIVITY = 0.0025 // rad per wheel deltaY px
 const AZIMUTH_DRAG_SENSITIVITY = 0.006 // rad per pointer px, alt-drag
 const POLAR_DRAG_SENSITIVITY = 0.006
+const AZIMUTH_TOUCH_SENSITIVITY = 0.008 // rad per finger px, one-finger horizontal swipe (flow mode)
 
 // Look-around available at all times, in both flow and inspect mode: a
 // two-finger trackpad drag (reported by the browser as a non-ctrl wheel
@@ -18,6 +19,12 @@ const POLAR_DRAG_SENSITIVITY = 0.006
 // call stopImmediatePropagation() so OrbitControls' own listeners (attached
 // later, same element) don't also react to the same event — see the calls
 // below. Reads mode from flowStore; never touches it.
+//
+// On a phone, a one-finger horizontal swipe orbits the camera in flow mode.
+// It is horizontal only: the canvas is touch-action: pan-y there (see
+// InspectionController._applyTouchAction), so vertical swipes still scroll
+// the page down to the site content. In inspect mode OrbitControls handles
+// touch itself (one-finger rotate, pinch zoom), so this stays out of it.
 export class FreeLookControl {
   constructor({ domElement, flowStore, onOrbit }) {
     this.domElement = domElement
@@ -26,6 +33,8 @@ export class FreeLookControl {
 
     this._active = false
     this._dragging = false
+    this._touchDragging = false
+    this._mode = 'flow'
     this._lastX = 0
     this._lastY = 0
 
@@ -38,6 +47,7 @@ export class FreeLookControl {
     domElement.addEventListener('pointerdown', this._onPointerDown)
     window.addEventListener('pointermove', this._onPointerMove)
     window.addEventListener('pointerup', this._onPointerUp)
+    window.addEventListener('pointercancel', this._onPointerUp)
 
     this._unsubscribe = flowStore.subscribe(() => this._onStoreChange(flowStore.getSnapshot()))
     this._onStoreChange(flowStore.getSnapshot())
@@ -45,7 +55,9 @@ export class FreeLookControl {
 
   _onStoreChange(state) {
     this._active = state.mode === 'flow' || state.mode === 'inspect'
+    this._mode = state.mode
     if (!this._active) this._dragging = false
+    if (state.mode !== 'flow') this._touchDragging = false
   }
 
   _onWheel(event) {
@@ -56,6 +68,12 @@ export class FreeLookControl {
   }
 
   _onPointerDown(event) {
+    if (event.pointerType === 'touch') {
+      if (this._mode !== 'flow' || !event.isPrimary) return
+      this._touchDragging = true
+      this._lastX = event.clientX
+      return
+    }
     if (!this._active || !event.altKey || event.button !== 0) return
     event.preventDefault()
     event.stopImmediatePropagation() // don't let OrbitControls also start its own drag-rotate
@@ -65,6 +83,12 @@ export class FreeLookControl {
   }
 
   _onPointerMove(event) {
+    if (this._touchDragging && event.pointerType === 'touch' && event.isPrimary) {
+      const dx = event.clientX - this._lastX
+      this._lastX = event.clientX
+      this.onOrbit(dx * AZIMUTH_TOUCH_SENSITIVITY, 0)
+      return
+    }
     if (!this._dragging) return
     if (!this._active) {
       this._dragging = false
@@ -82,6 +106,7 @@ export class FreeLookControl {
 
   _onPointerUp() {
     this._dragging = false
+    this._touchDragging = false
   }
 
   dispose() {
@@ -90,5 +115,6 @@ export class FreeLookControl {
     this.domElement.removeEventListener('pointerdown', this._onPointerDown)
     window.removeEventListener('pointermove', this._onPointerMove)
     window.removeEventListener('pointerup', this._onPointerUp)
+    window.removeEventListener('pointercancel', this._onPointerUp)
   }
 }

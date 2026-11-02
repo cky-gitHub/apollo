@@ -235,11 +235,15 @@ export class SceneManager {
       launchSequence: this.launchSequence,
     })
 
-    // Kick off the real T-10 countdown -> ignition -> liftoff cinematic —
-    // previously only the dev test-rig's 'L' key did this, so the shipped
-    // experience fell through to StagingChoreography's generic 0.9s glide
-    // between phases 0-2 instead of the tuned sequence (visibly "too fast").
-    // MissionAutoplay takes over automatically once liftoff settles.
+    // The T-10 countdown -> ignition -> liftoff cinematic waits for the
+    // visitor: the HUD's Launch button calls launch(). MissionAutoplay takes
+    // over automatically once liftoff settles.
+  }
+
+  // Starts the countdown. No-op until init() has built the launch sequence,
+  // and once the mission is already under way.
+  launch() {
+    if (!this.launchSequence || this.flowStore.getSnapshot().flow.launched) return
     this.launchSequence.start()
   }
 

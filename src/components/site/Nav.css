@@ -29,22 +29,45 @@
   justify-content: space-between;
 }
 
+/* The cky mark (public/cky-logo.svg, the same file the homepage uses). The
+   SVG is drawn in black, so it's applied as a mask and takes the text
+   colour instead; width follows the file's own aspect ratio. */
 .site-nav-mark {
-  font-family: var(--site-font-display);
-  font-weight: 500;
-  font-size: 1.05rem;
-  letter-spacing: 0.22em;
+  display: block;
+  line-height: 0;
   color: var(--site-text);
   text-decoration: none;
+  transition: color 0.25s ease;
+}
+
+.site-nav-logo {
+  display: block;
+  height: 34px;
+  aspect-ratio: 410.464 / 775.227;
+  background-color: currentColor;
+  -webkit-mask: url('/cky-logo.svg') center / contain no-repeat;
+  mask: url('/cky-logo.svg') center / contain no-repeat;
+}
+
+@media (hover: hover) {
+  .site-nav-mark:hover {
+    color: var(--site-accent-text);
+  }
+}
+
+@media (forced-colors: active) {
+  .site-nav-logo {
+    background-color: LinkText;
+  }
 }
 
 /* Legibility over whatever the 3D scene happens to be showing (bright sky,
    Earth limb) before the nav has picked up its solid backing. */
-.site-nav:not(.site-nav--solid) .site-nav-mark,
 .site-nav:not(.site-nav--solid) .site-nav-link {
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.75);
 }
 
+.site-nav:not(.site-nav--solid) .site-nav-mark,
 .site-nav:not(.site-nav--solid) .site-nav-toggle span {
   filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.75));
 }
