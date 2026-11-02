@@ -26,7 +26,7 @@ function HeroIntro() {
   return (
     <section className="hero-intro">
       <div className="hero-intro-inner">
-        <p className="eyebrow">You just watched Apollo 11 fly, unattended, start to finish</p>
+        <p className="eyebrow">You just watched Apollo 11 fly, start to finish</p>
         <h2 className="hero-intro-heading">This is a site about how it really happened.</h2>
         <p className="lede">
           The animation above is a real-time reconstruction of the mission — the same staging events,

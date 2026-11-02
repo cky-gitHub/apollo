@@ -9,11 +9,14 @@ import './HeroPage.css'
 function HeroPage() {
   const canvasRootRef = useRef(null)
   const spacerRef = useRef(null)
+  const sceneManagerRef = useRef(null)
   const [flowStore] = useState(() => new FlowStore())
+  const [sceneReady, setSceneReady] = useState(false)
 
   useEffect(() => {
     const container = canvasRootRef.current
     const sceneManager = new SceneManager(container, flowStore)
+    sceneManagerRef.current = sceneManager
     let disposed = false
 
     sceneManager.init().then(() => {
@@ -22,6 +25,7 @@ function HeroPage() {
         return
       }
       sceneManager.start()
+      setSceneReady(true)
     })
 
     // Idle the render loop once the fixed hero has scrolled fully out of
@@ -36,6 +40,8 @@ function HeroPage() {
 
     return () => {
       disposed = true
+      sceneManagerRef.current = null
+      setSceneReady(false)
       observer.disconnect()
       sceneManager.dispose()
     }
@@ -45,7 +51,11 @@ function HeroPage() {
     <div className="hero-page">
       <div className="hero-fixed">
         <div ref={canvasRootRef} className="hero-canvas-root" />
-        <Hud flowStore={flowStore} />
+        <Hud
+          flowStore={flowStore}
+          ready={sceneReady}
+          onLaunch={() => sceneManagerRef.current?.launch()}
+        />
         <ScrollCue />
       </div>
       <div ref={spacerRef} className="hero-spacer" aria-hidden="true" />

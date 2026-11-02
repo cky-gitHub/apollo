@@ -7,8 +7,11 @@ export function createFlowState() {
     mode: 'flow', // 'flow' | 'inspect'
     flow: {
       phase: 0, // 0-13, discrete step
-      // False until the real T-10 countdown (LaunchSequence, auto-started by
-      // SceneManager.init()) ticks down and flips it — see MissionAutoplay,
+      // False until the visitor presses Launch (SceneManager.launch()) — the
+      // countdown does not run on page load.
+      launched: false,
+      // False until the real T-10 countdown (LaunchSequence, started by
+      // SceneManager.launch()) ticks down and flips it — see MissionAutoplay,
       // which then carries phases 1-13 the rest of the way by itself.
       autoplayComplete: false,
     },
@@ -20,7 +23,7 @@ export function createFlowState() {
 
 const COUNTDOWN_START_SECONDS = 10
 
-// Ticks the phase-0 countdown down to 0 once per second, then flips
+// Once launched, ticks the phase-0 countdown down to 0 once per second, then flips
 // autoplayComplete — the signal that (per the skill) unlocks the space-bar
 // stepper elsewhere. Exposes a useSyncExternalStore-compatible
 // subscribe/getSnapshot pair for React consumers (see Hud.jsx).
@@ -66,7 +69,7 @@ export class FlowStore {
     if (this.state.flow.autoplayComplete) return
     this.state = {
       ...this.state,
-      flow: { ...this.state.flow, autoplayComplete: true },
+      flow: { ...this.state.flow, launched: true, autoplayComplete: true },
     }
     this._emit()
   }
@@ -78,7 +81,7 @@ export class FlowStore {
     this.countdownSeconds = COUNTDOWN_START_SECONDS
     this.state = {
       ...this.state,
-      flow: { ...this.state.flow, phase: 0, autoplayComplete: false },
+      flow: { ...this.state.flow, phase: 0, launched: true, autoplayComplete: false },
     }
     this._emit()
   }
@@ -89,8 +92,8 @@ export class FlowStore {
 
   _startTicking() {
     this._intervalId = setInterval(() => {
-      const { phase, autoplayComplete } = this.state.flow
-      if (phase !== 0 || autoplayComplete) return
+      const { phase, launched, autoplayComplete } = this.state.flow
+      if (!launched || phase !== 0 || autoplayComplete) return
 
       this.countdownSeconds = Math.max(0, this.countdownSeconds - 1)
       if (this.countdownSeconds === 0) {

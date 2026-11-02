@@ -32,8 +32,8 @@ function Nav({ isHero }) {
   return (
     <header className={`site-nav${solid ? ' site-nav--solid' : ''}`}>
       <div className="site-nav-inner">
-        <NavLink to="/" className="site-nav-mark" aria-label="Apollo — home">
-          APOLLO
+        <NavLink to="/" className="site-nav-mark" aria-label="cky — Apollo home">
+          <span className="site-nav-logo" aria-hidden="true" />
         </NavLink>
 
         <nav className="site-nav-links" aria-label="Primary">

@@ -43,6 +43,7 @@ export class InspectionController {
     // and some flow shots sit farther out than the old 260 — a tighter clamp
     // would visibly yank the camera inward on the first controls.update().
     this.controls.maxDistance = 700
+    this._applyTouchAction('flow')
 
     this._labelContainer = labelContainer
 
@@ -169,11 +170,22 @@ export class InspectionController {
   _applyMode(mode) {
     const isInspect = mode === 'inspect'
     this.controls.enabled = isInspect
+    this._applyTouchAction(mode)
     this._labelContainer.style.display = isInspect ? 'block' : 'none'
     if (!isInspect) {
       this._inspectStage = 'stack'
       this._collapseToStack()
     }
+  }
+
+  // OrbitControls sets touch-action: none on the canvas as soon as it is
+  // constructed, which on a phone made the full-screen hero swallow every
+  // swipe — the page could no longer be scrolled down to the content. Only
+  // inspect mode (where OrbitControls owns one-finger rotate and pinch zoom)
+  // needs that; in flow mode vertical swipes scroll the page and horizontal
+  // swipes are left to FreeLookControl's touch orbit.
+  _applyTouchAction(mode) {
+    this.renderer.domElement.style.touchAction = mode === 'inspect' ? 'none' : 'pan-y'
   }
 
   _applyInspectStage(stage) {
