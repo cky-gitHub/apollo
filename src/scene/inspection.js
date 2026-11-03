@@ -5,8 +5,11 @@ const EXPLODE_GAP = 15 // meters of extra spacing per stage boundary once explod
 const STAGE_TRANSITION_DURATION = 800 // ms
 const CLICK_DRAG_THRESHOLD = 5 // px of pointer movement still counted as a click
 const SVG_NS = 'http://www.w3.org/2000/svg'
-const LABEL_OFFSET_X = 110 // px, callout sits this far to the side of its stage's screen anchor
+const LABEL_OFFSET_X = 110 // px, callout sits this far to the side of its stage's screen anchor (less on narrow screens)
 const LABEL_OFFSET_Y = -6 // px
+const LABEL_GAP = 8 // px between the leader line's end and the text
+const LABEL_MARGIN = 12 // px the text always keeps from the screen edges
+const LABEL_MIN_WIDTH = 72 // px a wrapped label is never squeezed below
 
 function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
@@ -84,7 +87,8 @@ export class InspectionController {
         color: '#ffffff',
         fontFamily: 'var(--label-font, Inter, system-ui, sans-serif)',
         fontWeight: '300',
-        fontSize: '16px',
+        fontSize: 'clamp(13px, 3.6vw, 16px)',
+        lineHeight: '1.25',
         letterSpacing: '0.02em',
         textShadow: '0 1px 6px rgba(0, 0, 0, 0.85), 0 0 16px rgba(0, 0, 0, 0.5)',
         whiteSpace: 'nowrap',
@@ -357,22 +361,54 @@ export class InspectionController {
 
       const anchorX = (worldPos.x * 0.5 + 0.5) * clientWidth
       const anchorY = (1 - (worldPos.y * 0.5 + 0.5)) * clientHeight
-      const labelX = anchorX + LABEL_OFFSET_X
-      const labelY = anchorY + LABEL_OFFSET_Y
+      const { x: labelX, y: labelY, lineX } = this._placeLabel(el, anchorX, anchorY, clientWidth, clientHeight)
 
-      el.style.display = 'block'
-      el.style.transform = `translate(8px, -50%) translate(${labelX}px, ${labelY}px)`
+      el.style.transform = `translate(${labelX}px, ${labelY}px) translateY(-50%)`
 
       line.style.display = ''
       line.setAttribute('x1', anchorX)
       line.setAttribute('y1', anchorY)
-      line.setAttribute('x2', labelX)
+      line.setAttribute('x2', lineX)
       line.setAttribute('y2', labelY)
 
       dot.style.display = ''
       dot.setAttribute('cx', anchorX)
       dot.setAttribute('cy', anchorY)
     })
+  }
+
+  // Keeps a callout's text fully on screen: it goes on whichever side of its
+  // stage has room (right preferred), wraps onto more lines when neither side
+  // fits it on one, and is finally clamped inside the screen margins.
+  // Returns the text's left edge, its vertical centre and where the leader
+  // line should stop.
+  _placeLabel(el, anchorX, anchorY, width, height) {
+    el.style.display = 'block'
+    el.style.whiteSpace = 'nowrap'
+    el.style.maxWidth = 'none'
+    const natural = el.offsetWidth
+
+    const offset = Math.min(LABEL_OFFSET_X, Math.max(28, width * 0.08))
+    const rightRoom = width - LABEL_MARGIN - (anchorX + offset + LABEL_GAP)
+    const leftRoom = anchorX - offset - LABEL_GAP - LABEL_MARGIN
+    const onRight = rightRoom >= natural || rightRoom >= leftRoom
+    const room = Math.max(onRight ? rightRoom : leftRoom, LABEL_MIN_WIDTH)
+    const maxWidth = Math.min(room, width - 2 * LABEL_MARGIN)
+
+    if (natural > maxWidth) {
+      el.style.whiteSpace = 'normal'
+      el.style.maxWidth = `${maxWidth}px`
+    }
+    const w = el.offsetWidth
+    const h = el.offsetHeight
+
+    let x = onRight ? anchorX + offset + LABEL_GAP : anchorX - offset - LABEL_GAP - w
+    x = Math.min(Math.max(x, LABEL_MARGIN), width - LABEL_MARGIN - w)
+    let y = anchorY + LABEL_OFFSET_Y
+    y = Math.min(Math.max(y, LABEL_MARGIN + h / 2), height - LABEL_MARGIN - h / 2)
+
+    const lineX = onRight ? x - LABEL_GAP : x + w + LABEL_GAP
+    return { x, y, lineX }
   }
 
   dispose() {

@@ -146,7 +146,16 @@
     display: flex;
   }
 
+  /* Hangs below the bar. As a plain flex child of the fixed-height bar it
+     sat beside the toggle, centred on the bar, so most of it ran off the
+     top of the screen. */
   .site-nav-mobile {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: calc(100svh - var(--site-nav-height));
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 0.25rem;

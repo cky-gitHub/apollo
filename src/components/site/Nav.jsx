@@ -32,9 +32,11 @@ function Nav({ isHero }) {
   return (
     <header className={`site-nav${solid ? ' site-nav--solid' : ''}`}>
       <div className="site-nav-inner">
-        <NavLink to="/" className="site-nav-mark" aria-label="cky — Apollo home">
+        {/* The mark is the cky logo, so it goes home to ckyogeshwar.com. A
+            plain anchor: a router link to "/" would stay inside /apollo. */}
+        <a href="/" className="site-nav-mark" aria-label="cky — home">
           <span className="site-nav-logo" aria-hidden="true" />
-        </NavLink>
+        </a>
 
         <nav className="site-nav-links" aria-label="Primary">
           {LINKS.map((link) => (
