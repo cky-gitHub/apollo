@@ -428,21 +428,8 @@
     justify-content: center;
   }
 
+  /* Instructions are desktop-only. */
   .hud-guide {
-    right: auto;
-    left: 50%;
-    bottom: 12rem;
-    transform: translateX(-50%);
-    align-items: center;
-    width: max-content;
-    max-width: calc(100vw - 3.5rem);
-  }
-
-  .hud-guide--hidden {
-    transform: translateX(-50%) translateY(6px);
-  }
-
-  .hud-guide li {
-    text-align: left;
+    display: none;
   }
 }
