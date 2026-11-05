@@ -33,8 +33,8 @@ function useTelemetry(flowStore, phaseIndex) {
   const read = () => {
     const live = flowStore.telemetry
     const to = PHASES[phaseIndex] ?? PHASES[0]
-    if (!live || live.to !== phaseIndex) return telemetryAt(phaseIndex, to, 1)
-    return telemetryAt(live.from, to, live.t)
+    if (!live || live.to !== phaseIndex) return { ...telemetryAt(phaseIndex, to, 1), settled: !live }
+    return { ...telemetryAt(live.from, to, live.t), settled: live.t >= 1 }
   }
   const [values, setValues] = useState(read)
   const readRef = useRef(read)
@@ -50,7 +50,8 @@ function useTelemetry(flowStore, phaseIndex) {
         Math.round(next.met) !== Math.round(last.met) ||
         Math.abs(next.velocityMs - last.velocityMs) > 0.05 ||
         Math.abs(next.distEarthKm - last.distEarthKm) > 0.01 ||
-        Math.abs(next.distMoonKm - last.distMoonKm) > 0.01
+        Math.abs(next.distMoonKm - last.distMoonKm) > 0.01 ||
+        next.settled !== last.settled
       ) {
         last = next
         setValues(next)
@@ -102,7 +103,7 @@ function useIsTouch() {
 // something to press (always a button); `keys` is the desktop keyboard
 // shortcut for it, shown inside the button. `loading` swaps in the
 // vehicle-loading indicator.
-function hintFor(state, ready) {
+function hintFor(state, ready, missionOver) {
   if (state.mode === 'inspect') {
     return { keys: 'ESC', action: 'resume', label: 'Resume flight' }
   }
@@ -115,12 +116,15 @@ function hintFor(state, ready) {
     return { keys: null, action: null, label: 'Countdown' }
   }
   if (state.flow.phase >= MAX_PHASE) {
-    return { keys: null, action: null, label: 'Mission complete · Crew recovered' }
+    // Splashdown settled: one click (or Space) starts over from the pad.
+    return missionOver
+      ? { keys: 'SPACE', action: 'restart', label: 'Fly again' }
+      : { keys: null, action: null, label: 'Reentry' }
   }
   return { keys: 'SPACE', action: 'next', label: `Next · ${PHASES[state.flow.phase + 1].name}` }
 }
 
-function Hud({ flowStore, ready = false, onLaunch }) {
+function Hud({ flowStore, ready = false, onLaunch, onRestart }) {
   const state = useSyncExternalStore(flowStore.subscribe, flowStore.getSnapshot)
   const phase = PHASES[state.flow.phase] ?? PHASES[0]
 
@@ -132,7 +136,24 @@ function Hud({ flowStore, ready = false, onLaunch }) {
   const distMoon = telemetry.distMoonKm
 
   const isTouch = useIsTouch()
-  const hint = hintFor(state, ready)
+  const missionOver = state.flow.phase >= MAX_PHASE && telemetry.settled
+  const hint = hintFor(state, ready, missionOver)
+
+  // Space restarts once the mission is over (SpaceStepper has nothing left
+  // to step to by then). A focused button handles Space itself.
+  useEffect(() => {
+    if (!missionOver || state.mode !== 'flow') return undefined
+    const onKeyDown = (event) => {
+      if (event.code !== 'Space' || event.repeat) return
+      const tag = event.target?.tagName
+      if (tag === 'BUTTON' || tag === 'A' || tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (window.scrollY > window.innerHeight * 0.5) return
+      event.preventDefault()
+      onRestart?.()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [missionOver, state.mode, onRestart])
   // The look-around / inspect guide: shown from page load until the climb
   // is under way (phase 3), then it gets out of the way.
   const showGuide = state.mode === 'flow' && state.flow.phase < 3
@@ -140,6 +161,7 @@ function Hud({ flowStore, ready = false, onLaunch }) {
   const runAction = () => {
     if (hint.action === 'launch') onLaunch?.()
     else if (hint.action === 'resume') flowStore.setMode('flow')
+    else if (hint.action === 'restart') onRestart?.()
     else if (hint.action === 'next') flowStore.setPhase(Math.min(MAX_PHASE, state.flow.phase + 1))
   }
 
@@ -214,7 +236,7 @@ function Hud({ flowStore, ready = false, onLaunch }) {
           <span>
             {isTouch
               ? 'Swipe sideways to look around'
-              : 'Two-finger swipe on the trackpad, or hold Alt and drag with the mouse, to look around'}
+              : 'Click and drag, or swipe two fingers on the trackpad, to look around'}
           </span>
         </li>
         <li>

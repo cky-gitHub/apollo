@@ -120,14 +120,16 @@
   letter-spacing: 0.08em;
 }
 
-/* ---- top center, under the clock: the one control ---------------------
-   Launch / Next stage / Resume flight, centred under the GET clock. A white
-   glow, not amber — amber is reserved for readouts. Space presses it (see
-   spaceStepper.js); the key chip inside says so on desktop. */
+/* ---- bottom center, under the vehicle: the one control ----------------
+   Launch / Next stage / Resume flight / Fly again, centred low in the frame
+   just above the "Explore the program" cue — the vehicle is framed in the
+   middle of the screen, so up under the clock it covered the rocket's nose.
+   A white glow, not amber — amber is reserved for readouts. Space presses
+   it (see spaceStepper.js); the key chip inside says so on desktop. */
 
 .hud-action {
   position: absolute;
-  top: calc(var(--site-nav-height, 1.6rem) + 1rem + 3.9rem);
+  bottom: 5.7rem;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -265,22 +267,20 @@
   }
 }
 
-/* ---- lower middle: how to look around (first seconds only) ------------- */
+/* ---- bottom right: how to look around (first seconds only) ------------- */
 
 .hud-guide {
   position: absolute;
-  left: 50%;
-  bottom: 7.4rem;
-  transform: translateX(-50%);
+  right: 1.75rem;
+  bottom: 2.9rem;
   margin: 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   gap: 0.55rem;
-  width: max-content;
-  max-width: calc(100vw - 3.5rem);
+  max-width: 21rem;
   opacity: 1;
   transition:
     opacity 0.8s ease,
@@ -289,7 +289,7 @@
 
 .hud-guide--hidden {
   opacity: 0;
-  transform: translateX(-50%) translateY(6px);
+  transform: translateY(6px);
 }
 
 .hud-guide li {
@@ -301,6 +301,7 @@
   font-size: 0.72rem;
   letter-spacing: 0.05em;
   color: var(--mc-text-mid);
+  text-align: right;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.85);
 }
 
@@ -419,7 +420,6 @@
   /* The clock moves into the left column here, so the control drops to
      the lower middle, above the telemetry, as before. */
   .hud-action {
-    top: auto;
     bottom: 8rem;
   }
 
@@ -429,11 +429,20 @@
   }
 
   .hud-guide {
+    right: auto;
+    left: 50%;
     bottom: 12rem;
+    transform: translateX(-50%);
+    align-items: center;
+    width: max-content;
+    max-width: calc(100vw - 3.5rem);
+  }
+
+  .hud-guide--hidden {
+    transform: translateX(-50%) translateY(6px);
   }
 
   .hud-guide li {
-    white-space: normal;
     text-align: left;
   }
 }
