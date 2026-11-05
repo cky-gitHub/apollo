@@ -304,16 +304,15 @@ export class InspectionController {
       return
     }
 
-    if (stage === 'exploded') {
-      this.flowStore.setInspectStage(hitStageId ? { isolated: hitStageId } : 'stack')
+    // A click anywhere off the vehicle resumes the flight (same as Esc or
+    // the HUD's Resume button) — the HUD's look-around guide promises it.
+    if (!hitStageId) {
+      this.flowStore.setMode('flow')
       return
     }
 
-    // isolated
-    if (hitStageId && hitStageId !== stage.isolated) {
+    if (stage === 'exploded' || hitStageId !== stage.isolated) {
       this.flowStore.setInspectStage({ isolated: hitStageId })
-    } else if (!hitStageId) {
-      this.flowStore.setInspectStage('exploded')
     }
   }
 

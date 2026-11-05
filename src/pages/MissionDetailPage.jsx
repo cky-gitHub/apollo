@@ -38,8 +38,10 @@ function MissionDetailPage() {
 
           {mission.slug !== 'apollo-11' && (
             <p className="mission-detail-stub-note">
-              This mission's full retrospective — hour-by-hour timeline, imagery, mission audio — is
-              coming soon. This page is a placeholder scaffold.
+              For where this flight sits in the larger story — the hardware, the lunar-orbit
+              rendezvous plan, and what came after — see{' '}
+              <Link to="/program">The Apollo Program</Link>, or follow{' '}
+              <Link to="/apollo-11">Apollo 11</Link> hour by hour.
             </p>
           )}
         </div>

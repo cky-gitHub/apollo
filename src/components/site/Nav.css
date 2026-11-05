@@ -19,11 +19,14 @@
   border-bottom: 1px solid var(--site-hairline);
 }
 
+/* Full-width bar with the logo pinned to the top-left corner, matching the
+   main site's header (ckyogeshwar.com: 24px gutter, 36px mark) — it used to
+   sit inside the centred content column, so on wide screens it floated in
+   from the edge. */
 .site-nav-inner {
   width: 100%;
-  max-width: var(--site-max-width);
-  margin: 0 auto;
-  padding-inline: var(--site-gutter);
+  margin: 0;
+  padding-inline: 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -42,7 +45,7 @@
 
 .site-nav-logo {
   display: block;
-  height: 34px;
+  height: 36px;
   aspect-ratio: 410.464 / 775.227;
   background-color: currentColor;
   -webkit-mask: url('/cky-logo.svg') center / contain no-repeat;
@@ -138,6 +141,10 @@
    nav links beside the wordmark without wrapping into them — collapse to
    a toggle + dropdown instead of shrinking text further. */
 @media (max-width: 720px) {
+  .site-nav-inner {
+    padding-inline: max(22px, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+  }
+
   .site-nav-links {
     display: none;
   }
