@@ -16,9 +16,18 @@ import { MAX_PHASE } from '../../data/phases.js'
 // stepping to the next phase.
 const DEFAULT_HOLD_SECONDS = 2.2
 const HOLD_SECONDS = {
-  2: 1.3, // tower-clear breath before Max-Q's shake kicks in
-  9: 3.0, // let touchdown register before cutting to the surface tableau
-  10: 6.5, // Tranquility Base — the money shot, give it room
+  // Powered ascent is one continuous climb: liftoff hands straight to Max-Q,
+  // and each staging beat ends still moving (StagingChoreography's Hermite
+  // motion) — any hold here would park a burning rocket mid-air.
+  2: 0,
+  3: 0,
+  4: 0,
+  5: 0,
+  6: 0,
+  9: 2.0, // let touchdown register before cutting to the surface tableau
+  10: 4.0, // Tranquility Base — the money shot, give it room
+  11: 1.0, // docked: straight on to the burn for home
+  12: 1.2,
 }
 
 export class MissionAutoplay {

@@ -3,7 +3,7 @@
 // before the full staging sequence exists to drive them for real. Arrow
 // keys jump phases directly and bypass the autoplayComplete gate that
 // spaceStepper.js respects, so any phase can be reached immediately. 'L'
-// (re)triggers the real countdown/liftoff LaunchSequence from T-10, once
+// (re)triggers the real countdown/liftoff LaunchSequence from T-3, once
 // wired via setLaunchSequence(). Delete this file plus its wiring in
 // SceneManager.js once the real sequences land.
 import { PHASES, MAX_PHASE } from '../data/phases.js'

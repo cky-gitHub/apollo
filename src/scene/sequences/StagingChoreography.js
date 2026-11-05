@@ -2,7 +2,14 @@ import * as THREE from 'three'
 import { ExhaustSystem, EXHAUST_PRESETS } from '../particles/ExhaustSystem.js'
 import { SeparationFlash } from '../particles/SeparationFlash.js'
 import { Parachutes } from '../rocket/Parachutes.js'
-import { bodyMark, groundMark, lerpBodyMark, EARTH_BODY, MOON_BODY } from '../missionSpace.js'
+import {
+  bodyMark,
+  groundMark,
+  lerpBodyMark,
+  EARTH_BODY,
+  MOON_BODY,
+  EARTH_GROUND_RADIUS,
+} from '../missionSpace.js'
 import { PHASES } from '../../data/phases.js'
 
 // Powered ascent, staging, and the trans-lunar arc: phases 3-9, from Max-Q
@@ -121,12 +128,48 @@ function buildCsmGlint() {
 // position) and only eases once the vehicle is back to steady flight —
 // so apparent distance never visibly shifts at the moment hardware
 // separates. holdT/endT are fractions of the beat's total duration.
-function easeOutCubic(t) {
-  return 1 - (1 - t) ** 3
-}
-
 function holdThenEase(holdT, endT = 1) {
   return (t) => easeInOutCubic(Math.max(0, Math.min(1, (t - holdT) / (endT - holdT))))
+}
+
+function smoothstep(edge0, edge1, x) {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)))
+  return t * t * (3 - 2 * t)
+}
+
+// Powered-ascent position channel (beats with a `motion` spec). A cubic
+// Hermite in world space: it leaves `from` at the velocity the vehicle
+// actually had when the beat began (v0) and arrives at `to` already moving
+// at the beat's exit velocity (v1), so consecutive ascent beats chain with
+// no stop in between. The old per-beat easeInOut started and ended every
+// leg at rest — the stack visibly halted right after clearing the tower and
+// again before every staging event. u is the 0-1 fraction of the motion
+// window, T its length in seconds; v0/v1 in world units per second.
+function hermiteInto(out, from, to, v0, v1, T, u) {
+  const u2 = u * u
+  const u3 = u2 * u
+  const h00 = 2 * u3 - 3 * u2 + 1
+  const h01 = -2 * u3 + 3 * u2
+  const h10 = u3 - 2 * u2 + u
+  const h11 = u3 - u2
+  for (let i = 0; i < 3; i += 1) {
+    out[i] = h00 * from[i] + h01 * to[i] + h10 * T * v0[i] + h11 * T * v1[i]
+  }
+  return out
+}
+
+function slerpDir(a, b, t) {
+  const la = Math.hypot(...a)
+  const lb = Math.hypot(...b)
+  const ua = a.map((v) => v / la)
+  const ub = b.map((v) => v / lb)
+  const cos = Math.min(1, Math.max(-1, ua[0] * ub[0] + ua[1] * ub[1] + ua[2] * ub[2]))
+  const angle = Math.acos(cos)
+  if (angle < 1e-4) return ub
+  const sin = Math.sin(angle)
+  const wa = Math.sin((1 - t) * angle) / sin
+  const wb = Math.sin(t * angle) / sin
+  return [0, 1, 2].map((i) => ua[i] * wa + ub[i] * wb)
 }
 
 // Environment staging per phase: Earth/Moon [x, y, z, scale, opacity] and
@@ -395,6 +438,46 @@ const SETTLED = [
   },
 ]
 
+// Reentry approach (beat 13, while the vehicle is still parked at
+// FLIGHT_POS). Earth is NOT blended between its phase-12 marble and its
+// phase-13 ground tuple: that blend moved the sphere's anchor down to the
+// splash site and swung it straight underneath the camera while it was still
+// small, so Earth slid out of the bottom of the frame ("disappeared") and the
+// ocean disc then faded in on its own, floating in space. Instead the TRUE
+// remaining distance closes along a log schedule and every frame is rebuilt
+// by bodyMark from the vehicle — the same real-scale model the outbound leg
+// uses — so Earth grows dot -> marble -> globe -> horizon with no jump. It
+// stays on its EARTH_LINE bearing (in shot, lower left) until it is big, and
+// only then rolls round to lie underneath. The schedule ends exactly on the
+// phase-13 ground sphere: REENTRY_END_KM is the vehicle's real gap to it, in
+// the compressed range's linear segment, where bodyMark is the identity.
+const REENTRY_EARTH = SETTLED[13].env.earth
+const REENTRY_DIR_END = [0, 1, 2].map((i) => REENTRY_EARTH[i] - FLIGHT_POS[i])
+const REENTRY_END_KM = (Math.hypot(...REENTRY_DIR_END) - EARTH_GROUND_RADIUS) / 1000
+const REENTRY_START_KM = PHASES[12].distEarthKm
+const LN_TURN_START = Math.log(20000) // km: Earth begins rolling under the vehicle...
+const LN_TURN_END = Math.log(200) // ...and lies straight below from here
+const LN_OCEAN_START = Math.log(40) // km: the recovery-zone water fades in...
+const LN_OCEAN_END = Math.log(4) // ...riding on the (by now) terrain-close Earth
+// Ocean disc center relative to the ground-Earth's center at splashdown.
+const OCEAN_FROM_EARTH = [0, 1, 2].map((i) => SETTLED[13].env.ocean[i] - REENTRY_EARTH[i])
+
+function reentryApproachEnv(e, env) {
+  const lnKm = Math.log(REENTRY_START_KM) + (Math.log(REENTRY_END_KM) - Math.log(REENTRY_START_KM)) * e
+  const turn = smoothstep(LN_TURN_START, LN_TURN_END, lnKm)
+  const dir = slerpDir(EARTH_LINE, REENTRY_DIR_END, turn)
+  env.earth = e >= 1 ? REENTRY_EARTH.slice() : bodyMark(EARTH_BODY, FLIGHT_POS, dir, Math.exp(lnKm))
+  const ocean = env.ocean
+  for (let i = 0; i < 3; i += 1) ocean[i] = env.earth[i] + OCEAN_FROM_EARTH[i]
+  ocean[3] = 1
+  ocean[4] = smoothstep(LN_OCEAN_START, LN_OCEAN_END, lnKm)
+}
+
+// HUD telemetry share of beat 13 that the approach covers: the distance
+// readout reaches entry interface (~120 km) as the approach ends, and the
+// last 120 km tick off during the fiery descent. Log-space, matching the HUD.
+const REENTRY_HUD_SPLIT = 1 - Math.log(1 + 120) / Math.log(1 + REENTRY_START_KM)
+
 // Timed beats, keyed by the phase being entered. `at` is seconds from beat
 // start. Event handlers take (choreography, instant) — instant means the
 // beat is being fast-forwarded (user pressed space again mid-beat / jumped away)
@@ -407,6 +490,9 @@ const BEATS = {
   3: {
     duration: 5.0,
     progress: easeInOutCubic,
+    // Picks up the liftoff's climb rate and keeps accelerating through
+    // Max-Q, handing beat 4 a vehicle that is still moving fast.
+    motion: { exitSpeed: 130 },
     valid: (c) => !c._detached.has('S-IC'),
     events: [
       {
@@ -427,8 +513,12 @@ const BEATS = {
   4: {
     duration: 7.5,
     // S-IC is already out by this beat's t=0 (its extinguish() is the first
-    // event below); S-II doesn't light until 2.05s. Frozen until then.
+    // event below); S-II doesn't light until 2.05s. The stack coasts
+    // through the gap — bleeding speed, never stopping (momentum carries a
+    // real Saturn V straight through staging) — and the J-2s pick it back up.
+    // The spent S-IC only inherits part of that velocity, so it falls away.
     progress: holdThenEase(2.05 / 7.5, 1),
+    motion: { exitSpeed: 110 },
     // Hold Earth/Moon flat through the S-IC drop (0.55s) with a buffer, only
     // easing once S-II is burning steady.
     envEase: holdThenEase(1.0 / 7.5),
@@ -472,6 +562,7 @@ const BEATS = {
   5: {
     duration: 6.0,
     progress: easeInOutCubic,
+    motion: { exitSpeed: 120 },
     // Hold through the LES tower jettison (2.6s) with a buffer.
     envEase: holdThenEase(0.5),
     valid: (c) => !c._detached.has('LES'),
@@ -495,9 +586,10 @@ const BEATS = {
   // the first staging but statelier — thinner air, one engine, wider plume.
   6: {
     duration: 7.5,
-    // Same shape as beat 4: dead still through the coast, S-IVB doesn't
-    // light until 2.1s.
+    // Same shape as beat 4: coasting through the gap, S-IVB doesn't light
+    // until 2.1s.
     progress: holdThenEase(2.1 / 7.5, 1),
+    motion: { exitSpeed: 120 },
     // Hold Earth/Moon flat through the S-II drop (0.6s) with a buffer, only
     // easing once the S-IVB is burning steady for TLI.
     envEase: holdThenEase(1.0 / 7.5),
@@ -544,11 +636,13 @@ const BEATS = {
   7: {
     duration: 19.3,
     // The S-IVB is still burning off its last 0.9s of TLI at this beat's
-    // start (extinguish() below) — that's the whole position move. The
-    // vehicle then holds dead still in world space for the rest of the
-    // beat while the SLA/CSM/S-IVB choreography plays out in front of a
-    // stationary camera — no engine fires again until beat 8's SPS.
-    progress: holdThenEase(0, 0.9 / 19.3),
+    // start (extinguish() below). The vehicle carries its TLI speed into
+    // the beat and glides to a stop over the first 5s, then holds still in
+    // world space for the rest of the beat while the SLA/CSM/S-IVB
+    // choreography plays out — no engine fires again until beat 8's SPS.
+    // (It used to cover the whole 400-unit move in 0.9s, from rest.)
+    progress: holdThenEase(0, 5.0 / 19.3),
+    motion: { exitSpeed: 0, end: 5.0 / 19.3 },
     // The stack keeps its TLI attitude throughout (AIM_7), and Earth
     // finishes receding (1.0-4.4s) before the SLA pyros fire at 4.7s. From
     // then on nothing moves but the hardware being handled: the backdrop
@@ -749,16 +843,16 @@ const BEATS = {
   // for the first third — vertical rise off solid ground — before the Moon
   // recedes underneath.
   11: {
-    duration: 18,
+    duration: 15,
     // Dead still on the pad until the APS lights (0.6s); the ascent burn is
     // what climbs it to orbit, and it holds flat again once APS cuts off
     // (8.6s) — Columbia's rendezvous/dock afterward is all relative motion
     // on the CSM's own tweens, not the vehicle translating.
-    progress: holdThenEase(0.6 / 18, 8.6 / 18),
+    progress: holdThenEase(0.6 / 15, 8.6 / 15),
     // Pitch-over and the Moon falling away both belong to the ascent burn
     // (0.6-8.6s). They used to run on to the very end of the beat, so the
     // stack was still turning while Columbia docked with it.
-    ease: holdThenEase(0.6 / 18, 8.6 / 18),
+    ease: holdThenEase(0.6 / 15, 8.6 / 15),
     valid: (c) =>
       c._csmState === 'gone' && !c._detached.has('LM-DS') && !c._detached.has('LM'),
     events: [
@@ -780,6 +874,49 @@ const BEATS = {
         },
       },
       {
+        at: 3.6,
+        run: (c, instant) => {
+          // Columbia comes into the shot early and stays in it: it starts
+          // far out BEHIND the ascent stage as seen from the camera (a small
+          // shape against the stars, never off-frame), then swings round
+          // onto the docking axis and brakes into contact — fast at first,
+          // crawling at the end, the way a final approach reads. It used to
+          // stay a distant orbit glint until 8.8s and then slide in from
+          // above the frame, so for most of the ascent it simply wasn't
+          // there. The dock event below is the instant-safe hard set.
+          if (instant) return
+          c._restore('CSM')
+          const csm = c._jettisonable['CSM']?.object
+          if (!csm) return
+          csm.rotation.set(0, 0, Math.PI)
+          const parent = csm.parent
+          const camera = c.sceneManager.camera
+          const lmWorld = (c._lmGroup ?? csm).getWorldPosition(new THREE.Vector3())
+          const away = lmWorld.clone().sub(camera.position).normalize()
+          const farWorld = lmWorld.addScaledVector(away, 380).add(new THREE.Vector3(0, 22, 0))
+          const p0 = parent.worldToLocal(farWorld)
+          // Close enough above the hatch to stay inside the phase-11 framing.
+          const p1 = new THREE.Vector3(0, c._dockLocalY + 12, 0)
+          const p2 = new THREE.Vector3(0, c._dockLocalY + 1.2, 0)
+          csm.position.copy(p0)
+          c._addTween(
+            9.4,
+            (t) => {
+              // Quadratic Bezier: off-axis far point -> on-axis -> contact.
+              const a = (1 - t) * (1 - t)
+              const b = 2 * (1 - t) * t
+              const d = t * t
+              csm.position.set(
+                a * p0.x + b * p1.x + d * p2.x,
+                a * p0.y + b * p1.y + d * p2.y,
+                a * p0.z + b * p1.z + d * p2.z,
+              )
+            },
+            (t) => 1 - (1 - t) ** 2,
+          )
+        },
+      },
+      {
         at: 8.6,
         run: (c) => {
           c._exhausts['APS']?.extinguish()
@@ -787,31 +924,7 @@ const BEATS = {
         },
       },
       {
-        at: 8.8,
-        run: (c, instant) => {
-          // Columbia rejoins along the docking axis from well out of frame
-          // and brakes into contact: fast at first, crawling at the end, the
-          // way a final approach reads. It used to be restored only 46 units
-          // out - inside the shot - so it simply appeared. The dock event
-          // below is the instant-safe hard set.
-          if (instant) return
-          c._restore('CSM')
-          const csm = c._jettisonable['CSM']?.object
-          if (!csm) return
-          csm.rotation.set(0, 0, Math.PI)
-          const fromY = c._dockLocalY + 170
-          csm.position.y = fromY
-          c._addTween(
-            6.4,
-            (t) => {
-              csm.position.y = THREE.MathUtils.lerp(fromY, c._dockLocalY + 1.2, t)
-            },
-            easeOutCubic,
-          )
-        },
-      },
-      {
-        at: 15.8,
+        at: 13.2,
         run: (c, instant) => {
           c._restore('CSM')
           const csm = c._jettisonable['CSM']?.object
@@ -834,23 +947,23 @@ const BEATS = {
   // quiet beat, then the SPS lights for home while the Moon drops away
   // behind and Earth begins to grow ahead.
   12: {
-    duration: 12,
-    // Dead still through the Eagle jettison and the quiet beat after it;
-    // the SPS burn (3.0s-9.6s) is the whole move, same window the env
+    duration: 9.5,
+    // Dead still through the Eagle jettison and the short beat after it;
+    // the SPS burn (2.2s-8.2s) is the whole move, same window the env
     // channel below tracks.
-    progress: holdThenEase(3.0 / 12, 9.6 / 12),
-    // Once Eagle is clear, the stack turns onto the Moon line (1.4-2.9s) so
+    progress: holdThenEase(2.2 / 9.5, 8.2 / 9.5),
+    // Once Eagle is clear, the stack turns onto the Moon line (0.9-2.0s) so
     // the SPS fires from a settled attitude, not mid-turn.
-    ease: holdThenEase(1.4 / 12, 2.9 / 12),
-    // Held flat through the Eagle jettison (0.9s); Earth/Moon only start
-    // trading places once the SPS actually lights (3.0s) for the real TEI
-    // burn, settling by cutoff (9.6s) — the distance change tracks the burn,
+    ease: holdThenEase(0.9 / 9.5, 2.0 / 9.5),
+    // Held flat through the Eagle jettison (0.5s); Earth/Moon only start
+    // trading places once the SPS actually lights (2.2s) for the real TEI
+    // burn, settling by cutoff (8.2s) — the distance change tracks the burn,
     // not the LM drop.
-    envEase: holdThenEase(3.0 / 12, 9.6 / 12),
+    envEase: holdThenEase(2.2 / 9.5, 8.2 / 9.5),
     valid: (c) => c._csmState === 'docked' && c._detached.has('LM-DS') && !c._detached.has('LM'),
     events: [
       {
-        at: 0.9,
+        at: 0.5,
         run: (c, instant) =>
           c._separate('LM', instant, {
             // Eagle stays in lunar orbit — it must clear down-stack (dock
@@ -867,7 +980,7 @@ const BEATS = {
           }),
       },
       {
-        at: 3.0,
+        at: 2.2,
         run: (c, instant) => {
           // Eagle stays in lunar orbit: from here it recedes with the Moon
           // rather than drifting home beside Columbia.
@@ -879,7 +992,7 @@ const BEATS = {
         },
       },
       {
-        at: 9.6,
+        at: 8.2,
         run: (c) => {
           c._exhausts['SPS'].extinguish()
           c._setVibe(0)
@@ -923,7 +1036,16 @@ const BEATS = {
     // discrete separation event doesn't itself read as changing the range
     // home (same principle as every other embedded-jettison beat, just
     // with the ease BEFORE the drop instead of after it).
-    envEase: holdThenEase(0, 0.32),
+    envEase: holdThenEase(0, 0.34),
+    // ...but Earth and the recovery water don't take the generic blend —
+    // see reentryApproachEnv. The Moon still lerps normally.
+    envHook: (env, envT) => reentryApproachEnv(envT, env),
+    // Deep-space black until the capsule is actually in the atmosphere: the
+    // blue only comes back during the plasma/parachute descent.
+    skyEase: holdThenEase(14.5 / 26, 23 / 26),
+    hudEase: (t) =>
+      REENTRY_HUD_SPLIT * holdThenEase(0, 0.34)(t) +
+      (1 - REENTRY_HUD_SPLIT) * holdThenEase(14.5 / 26, 25 / 26)(t),
     valid: (c) => c._csmState === 'docked' && c._detached.has('LM') && !c._detached.has('SM'),
     events: [
       {
@@ -1153,6 +1275,7 @@ export class StagingChoreography {
     })
     this._padOpacity = 1
 
+    this._telemetryFrom = 0
     this._detached = new Set()
     this._debris = []
     this._csmOrbit = null
@@ -1163,6 +1286,12 @@ export class StagingChoreography {
     this._vibe = 0
     this._time = 0
     this._rocketVel = new THREE.Vector3()
+    // Exact (unsmoothed) vehicle velocity, world units/s — what the next
+    // powered beat's Hermite motion picks up from (see hermiteInto).
+    this._flightVel = new THREE.Vector3()
+    // Velocity the vehicle keeps coasting at after a powered beat ends and
+    // before the next one starts (null when parked).
+    this._cruise = null
     this._prevFlightPos = rocket.position.clone()
     this._flightPos = rocket.position.clone()
     this._flightTilt = 0
@@ -1223,6 +1352,9 @@ export class StagingChoreography {
 
   _handlePhaseChange(prev, next) {
     const launchDriving = LAUNCH_DRIVING_STAGES.has(this.launchSequence?.stage)
+    // HUD telemetry for the new phase spools from the previous phase's
+    // anchors on this phase's own beat/glide clock (see _publishTelemetry).
+    this._telemetryFrom = prev
 
     // Countdown/liftoff owns its own 0 -> 1 -> 2 progression — but only when
     // it was already flying those phases. Arriving from >= 3 (test-rig 'L'
@@ -1262,6 +1394,12 @@ export class StagingChoreography {
   // the vehicle right now — false once jettisoned, or for the LM before its
   // transposition-beat reveal. Lets inspection hide labels/exploded slots
   // for hardware that isn't actually there anymore.
+  // The vehicle's position without the engine-vibration jitter — what the
+  // camera carries itself along with (SceneManager._updateCamera).
+  get vehiclePosition() {
+    return this._flightPos
+  }
+
   isStagePresent(id) {
     if (id === 'LM') return (this._lmGroup?.visible ?? false) && !this._detached.has('LM')
     return !this._detached.has(id)
@@ -1278,14 +1416,31 @@ export class StagingChoreography {
 
   _startBeat(phase, spec) {
     if (this._beat) this._finishBeat()
-    this._beat = {
-      phase,
-      spec,
-      elapsed: 0,
-      from: this._captureContinuous(),
-      to: SETTLED[phase],
-      eventIndex: 0,
+    const from = this._captureContinuous()
+    const to = SETTLED[phase]
+    let motion = null
+    if (spec.motion) {
+      // Exit velocity points along the bisector of this leg and the next
+      // one (Catmull-Rom style), so the path bends smoothly into the next
+      // beat instead of kinking at the settled point.
+      const leg = new THREE.Vector3().fromArray(to.pos).sub(new THREE.Vector3().fromArray(from.pos))
+      const exit = leg.clone().normalize()
+      const next = SETTLED[phase + 1]
+      if (next) {
+        const nextLeg = new THREE.Vector3().fromArray(next.pos).sub(new THREE.Vector3().fromArray(to.pos))
+        if (nextLeg.lengthSq() > 1e-6) exit.add(nextLeg.normalize()).normalize()
+      }
+      const end = spec.motion.end ?? 1
+      motion = {
+        v0: this._flightVel.toArray(),
+        v1: exit.multiplyScalar(spec.motion.exitSpeed).toArray(),
+        end,
+        seconds: spec.duration * end,
+        out: [0, 0, 0],
+      }
     }
+    this._cruise = null
+    this._beat = { phase, spec, elapsed: 0, from, to, motion, eventIndex: 0 }
   }
 
   _captureContinuous() {
@@ -1302,6 +1457,7 @@ export class StagingChoreography {
   _finishBeat() {
     const beat = this._beat
     this._beat = null
+    this._cruise = null
     this._flushTweens()
     this._applyContinuous(beat.from, beat.to, 1, 1)
     for (let i = beat.eventIndex; i < beat.spec.events.length; i += 1) {
@@ -1315,15 +1471,21 @@ export class StagingChoreography {
   // keep easing normally — otherwise the Earth/Moon marks would visibly
   // shift at the exact instant hardware separates, which reads as the drop
   // itself somehow changing the vehicle's distance from either body.
-  _applyContinuous(from, to, motionT, easeT, envEaseT = easeT) {
-    this._flightPos.set(
-      THREE.MathUtils.lerp(from.pos[0], to.pos[0], motionT),
-      THREE.MathUtils.lerp(from.pos[1], to.pos[1], motionT),
-      THREE.MathUtils.lerp(from.pos[2], to.pos[2], motionT),
-    )
+  // Optional extras: `pos` overrides the lerped position (Hermite motion),
+  // `skyT` gives the sky its own clock, `envHook(env, envEaseT)` rewrites
+  // env entries after the generic blend (reentry approach).
+  _applyContinuous(from, to, motionT, easeT, envEaseT = easeT, { pos, skyT = easeT, envHook } = {}) {
+    if (pos) this._flightPos.fromArray(pos)
+    else {
+      this._flightPos.set(
+        THREE.MathUtils.lerp(from.pos[0], to.pos[0], motionT),
+        THREE.MathUtils.lerp(from.pos[1], to.pos[1], motionT),
+        THREE.MathUtils.lerp(from.pos[2], to.pos[2], motionT),
+      )
+    }
     this._flightTilt = THREE.MathUtils.lerp(from.tilt, to.tilt, easeT)
     this._flightYaw = THREE.MathUtils.lerp(from.yaw ?? 0, to.yaw ?? 0, easeT)
-    this.skyEnvironment.setAltitudeFactor(THREE.MathUtils.lerp(from.sky, to.sky, easeT))
+    this.skyEnvironment.setAltitudeFactor(THREE.MathUtils.lerp(from.sky, to.sky, skyT))
     // Front-load the pad fade: it must be gone by ~40% of the 2->3 Max-Q beat,
     // BEFORE the ascent Earth swells in, or the fading flat pad terrain reads
     // as a translucent shelf cutting across the curved globe. Only the pad
@@ -1347,6 +1509,7 @@ export class StagingChoreography {
         now[key][i] = THREE.MathUtils.lerp(a[i], b[i], envEaseT)
       }
     }
+    envHook?.(now, envEaseT)
     this._applyEnvNow()
   }
 
@@ -1396,6 +1559,7 @@ export class StagingChoreography {
   // immediately, continuous ones glide over ~a second so jumps don't pop.
   _snapTo(phase, { glide = true } = {}) {
     if (this._beat) this._finishBeat()
+    this._cruise = null
     this._flushTweens()
     const target = SETTLED[phase]
 
@@ -1794,18 +1958,24 @@ export class StagingChoreography {
     this._updateTweens(dt)
 
     let owns = false
+    let telemetryT = 1
     if (this._beat) {
       owns = true
       const beat = this._beat
       beat.elapsed += dt
       const t = Math.min(beat.elapsed / beat.spec.duration, 1)
-      this._applyContinuous(
-        beat.from,
-        beat.to,
-        beat.spec.progress(t),
-        (beat.spec.ease ?? easeInOutCubic)(t),
-        (beat.spec.envEase ?? beat.spec.ease ?? easeInOutCubic)(t),
-      )
+      const spec = beat.spec
+      const motion = beat.motion
+      const easeT = (spec.ease ?? easeInOutCubic)(t)
+      const envT = (spec.envEase ?? spec.ease ?? easeInOutCubic)(t)
+      this._applyContinuous(beat.from, beat.to, spec.progress(t), easeT, envT, {
+        pos: motion
+          ? hermiteInto(motion.out, beat.from.pos, beat.to.pos, motion.v0, motion.v1, motion.seconds, Math.min(t / motion.end, 1))
+          : undefined,
+        skyT: spec.skyEase ? spec.skyEase(t) : easeT,
+        envHook: spec.envHook,
+      })
+      telemetryT = spec.hudEase ? spec.hudEase(t) : envT
       const events = beat.spec.events
       while (beat.eventIndex < events.length && events[beat.eventIndex].at <= beat.elapsed) {
         events[beat.eventIndex].run(this, false)
@@ -1813,6 +1983,9 @@ export class StagingChoreography {
       }
       if (t >= 1 && beat.eventIndex >= events.length && this._tweens.length === 0) {
         this._beat = null
+        // Powered beats hand off still moving: keep coasting at the exit
+        // velocity until the next beat picks it up (normally next frame).
+        if (motion && Math.hypot(...motion.v1) > 0) this._cruise = new THREE.Vector3().fromArray(motion.v1)
       }
     } else if (this._glide) {
       owns = true
@@ -1821,9 +1994,17 @@ export class StagingChoreography {
       const t = Math.min(glide.elapsed / GLIDE_SECONDS, 1)
       const eased = easeInOutCubic(t)
       this._applyContinuous(glide.from, glide.to, eased, eased)
+      telemetryT = eased
       if (t >= 1) this._glide = null
     } else if (this._phase >= 3) {
       owns = true // settled high-phase state: keep vibration alive
+      if (this._cruise) {
+        // Fades out over a few seconds in case nothing picks it up (manual
+        // stepping), so a parked vehicle never drifts off indefinitely.
+        this._flightPos.addScaledVector(this._cruise, dt)
+        this._cruise.multiplyScalar(Math.exp(-dt / 3))
+        if (this._cruise.lengthSq() < 1) this._cruise = null
+      }
     } else {
       // Phases 0-2 with no beat/glide active: LaunchSequence is writing
       // rocket.position directly (pad hold, then the liftoff rise). Mirror
@@ -1834,9 +2015,27 @@ export class StagingChoreography {
       // back down to the pad for a frame before climbing again.
       this._flightPos.copy(this.rocket.position)
       this._prevFlightPos.copy(this.rocket.position)
+      // The liftoff's climb rate, analytic — the 2->3 beat must pick it up
+      // exactly or the stack stalls for a moment after clearing the tower.
+      this._flightVel.set(0, this.launchSequence?.velocityY ?? 0, 0)
+      if (this._phase === 2) telemetryT = this.launchSequence?.liftoffProgress ?? 1
     }
 
     if (owns) this._writeRocketTransform(dt)
+    this._publishTelemetry(telemetryT)
+  }
+
+  // Lets the HUD spool its telemetry on the SAME clock as what's on screen
+  // (Earth/Moon distances follow the env channel, which is held or eased
+  // per beat), instead of on a fixed 2.4 s timer from the phase change —
+  // which showed e.g. "0 km from Earth" while Earth was still a distant dot.
+  // A plain field, not a store emit: it changes every frame.
+  _publishTelemetry(t) {
+    this.flowStore.telemetry = {
+      from: this._telemetryFrom,
+      to: this._phase,
+      t: THREE.MathUtils.clamp(t, 0, 1),
+    }
   }
 
   _writeRocketTransform(dt = 0) {
@@ -1864,6 +2063,7 @@ export class StagingChoreography {
       // Smoothed flight velocity — seeds separation debris so spent stages
       // inherit the vehicle's motion instead of stopping dead.
       const instVel = this._flightPos.clone().sub(this._prevFlightPos).divideScalar(dt)
+      this._flightVel.copy(instVel)
       this._rocketVel.lerp(instVel, Math.min(dt * 6, 1))
     }
     this._prevFlightPos.copy(this._flightPos)

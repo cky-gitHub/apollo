@@ -7,9 +7,10 @@
 // SceneManager's existing subscribe -> setPhase -> camera-tween machinery
 // handles every camera move. This file never touches the camera directly.
 //
-// Rough build: the liftoff rise itself is a simple eased translation of the
-// whole rocket group, tuned by eye rather than derived from real physics or
-// the HUD's placeholder telemetry numbers.
+// The liftoff rise is an ease-in (slow off the pad, gathering speed) that
+// ends still accelerating: MissionAutoplay steps straight to phase 3 the
+// moment it finishes, and the Max-Q beat continues from velocityY, so the
+// climb flows on without a stop.
 const IGNITION_HOLD_SECONDS = 2
 const LIFTOFF_DURATION_SECONDS = 9
 const HOLD_RISE_METERS = 35 // how far above the pad the sequence holds — tuned to stay inside the phase-2 camera framing
@@ -33,6 +34,7 @@ export class LaunchSequence {
     this._padY = rocket.position.y
     this._stage = 'idle' // idle | countdown | ignitionHold | liftoff | holding
     this._stageStartMs = 0
+    this._liftoffT = 0
     this._prevAutoplayComplete = flowStore.getSnapshot().flow.autoplayComplete
 
     this._onStoreChange = this._onStoreChange.bind(this)
@@ -43,7 +45,21 @@ export class LaunchSequence {
     return this._stage
   }
 
-  // (Re)starts from T-10, resetting rocket position, exhaust, and sky.
+  // 0-1 through the liftoff rise (1 once it has finished).
+  get liftoffProgress() {
+    return this._liftoffT
+  }
+
+  // Current climb rate in world units/s (analytic derivative of the rise).
+  // Stays at the end-of-rise rate once the rise completes: the staging
+  // choreography's Max-Q beat takes over on that same frame and continues
+  // the climb from exactly this speed, so the stack never pauses.
+  get velocityY() {
+    if (this._liftoffT <= 0) return 0
+    return (3 * this._liftoffT ** 2 * HOLD_RISE_METERS) / LIFTOFF_DURATION_SECONDS
+  }
+
+  // (Re)starts from T-3, resetting rocket position, exhaust, and sky.
   start() {
     this.rocket.position.y = this._padY
     this.exhaustSystem.extinguish()
@@ -51,6 +67,7 @@ export class LaunchSequence {
     this.skyEnvironment.setAltitudeFactor(0)
 
     this._stage = 'countdown'
+    this._liftoffT = 0
     this._stageStartMs = performance.now()
     this._prevAutoplayComplete = false
 
@@ -89,6 +106,7 @@ export class LaunchSequence {
 
     if (this._stage === 'liftoff') {
       const t = Math.min((nowMs - this._stageStartMs) / 1000 / LIFTOFF_DURATION_SECONDS, 1)
+      this._liftoffT = t
       const eased = easeInCubic(t)
       this.rocket.position.y = this._padY + eased * HOLD_RISE_METERS
       this.skyEnvironment.setAltitudeFactor(eased * LIFTOFF_SKY_FACTOR)

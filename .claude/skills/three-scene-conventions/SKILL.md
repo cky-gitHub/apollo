@@ -62,7 +62,7 @@ Reference spec data (diameters, lengths, engine counts/types, labels) lives in s
 
 mode: 'flow' | 'inspect'
 
-flow.phase: 0-13 (int, discrete steps, not continuous scroll mapping). MAX\_PHASE is exported from src/data/phases.js — never hardcode it. phases.js also carries the real Apollo 11 telemetry anchors (met = GET seconds, distEarthKm, distMoonKm, velocityMs, detail) that the HUD spools between; keep those roughly true to the mission, they are not decorative.
+flow.phase: 0-13 (int, discrete steps, not continuous scroll mapping). MAX\_PHASE is exported from src/data/phases.js — never hardcode it. phases.js also carries the real Apollo 11 telemetry anchors (met = GET seconds, distEarthKm, distMoonKm, velocityMs, detail) that the HUD spools between (on the choreography's own clock — see "Motion continuity" below); keep those roughly true to the mission, they are not decorative.
 
 flow.autoplayComplete: boolean
 
@@ -70,7 +70,7 @@ inspect.stage: 'stack' | 'exploded' | { isolated: stageId }
 
 
 
-flow.autoplayComplete defaults to FALSE (flowState.js) — the real T-10 countdown must actually run. SceneManager.init() auto-calls launchSequence.start() (previously this was ONLY reachable via the dev test-rig's 'L' key, which meant the shipped path fell through to StagingChoreography's generic 0.9s glide between phases 0-2 instead of the tuned 2s ignition-hold + 9s liftoff rise — looked like the rocket snapping upward). The countdown ticks 10->0 and flips autoplayComplete once it hits 0, which is also what unlocks the Space-bar listener.
+flow.autoplayComplete defaults to FALSE (flowState.js) — the real T-3 countdown must actually run (shortened from T-10, which felt too long). SceneManager.init() auto-calls launchSequence.start() (previously this was ONLY reachable via the dev test-rig's 'L' key, which meant the shipped path fell through to StagingChoreography's generic 0.9s glide between phases 0-2 instead of the tuned 2s ignition-hold + 9s liftoff rise — looked like the rocket snapping upward). The countdown ticks 3->0 and flips autoplayComplete once it hits 0, which is also what unlocks the Space-bar listener.
 
 \## Mission autoplay (sequences/MissionAutoplay.js)
 
@@ -168,3 +168,12 @@ The Sun (environment/Sun.js) is a procedural additive billboard (hot white core 
 
 Procedural LC-39A evocation: scrub/beach/Atlantic terrain (+X is east — the gravity turn flies out over the water), raised hardstand mound with the flame trench cut along Z (deflector ridge inside), Mobile Launcher Platform on pedestals with its deck TOP at y=0 (the rocket's resting height — the vehicle is never repositioned for the pad), and the Launch Umbilical Tower at x=-20 (lattice legs/braces, hammerhead crane, nine swing arms, white room on the top arm). All materials are created inside buildLaunchPad and shared with nothing else — StagingChoreography traverses the returned group to set renderOrder=-1 and drive the altitude fade, so any mesh added here inherits that contract automatically.
 
+
+
+\## Motion continuity, camera follow, reentry, HUD sync
+
+\- Powered ascent never stops. Beats 3-6 carry a `motion: { exitSpeed }` spec: position follows a world-space cubic Hermite (hermiteInto) that starts at the vehicle's actual velocity (`_flightVel`, exact per-frame; for the 2->3 handoff it is LaunchSequence.velocityY, the analytic end-of-rise climb rate) and ends at exitSpeed along the bisector of this leg and the next. MissionAutoplay HOLD\_SECONDS is 0 for phases 2-6 so the next beat starts on the frame the previous one ends; if anything delays it, the settled branch coasts on `_cruise` (decays over ~3 s). MECO/S-II cutoff are coasts that bleed speed, not dead stops. Beat 7 glides from TLI speed to rest over its first 5 s (motion.end). Don't reintroduce easeInOut position channels on ascent beats — that is what made the stack halt after clearing the tower and before each staging.
+\- Camera follow (SceneManager.\_updateCamera): on rocket-frame poses the camera is first carried RIGIDLY by the vehicle's vibration-free translation (`choreography.vehiclePosition`), then exponentially eased toward its pose. Smoothing the absolute position made the camera trail by velocity/lambda, which at TLI/reentry speeds exceeded the shot distance — the rocket flew out of frame and came back. The carry blends 0->1 across a world-pose -> rocket-pose transition.
+\- Reentry (beat 13) does NOT lerp Earth between its phase-12 marble and phase-13 ground tuples (that swung a still-small Earth out under the frame and left the ocean disc floating in space). `envHook: reentryApproachEnv` rebuilds Earth every frame with bodyMark from FLIGHT\_POS along a log-distance schedule ending exactly on the phase-13 groundMark (REENTRY\_END\_KM is the real remaining gap, in compressDistance's linear segment), holding the EARTH\_LINE bearing until Earth is big and only then rolling it underneath; the ocean disc rides on Earth's center and fades in between 40 and 4 km. `skyEase` keeps space black until the plasma descent.
+\- HUD telemetry is not on a timer. StagingChoreography writes `flowStore.telemetry = { from, to, t }` every frame (plain field, no emit — MissionAutoplay resets its hold on every emit); t is the beat's `hudEase` ?? envEase, the glide ease, or the liftoff progress. Hud.jsx reads it per animation frame and interpolates PHASES anchors (distances in log(1+km) space). Beat 13's hudEase reaches ~120 km (entry interface) as the approach ends and ticks off the rest during the descent.
+\- Lunar rendezvous (beat 11): Columbia is restored at 3.6 s far behind the ascent stage as seen from the camera and flies a quadratic Bezier onto the docking axis, so it is in shot the whole climb (it used to stay an orbit glint until 8.8 s and then slide in from above the frame). Phase 11 camera focusHeight is 97 (between ascent stage and docked CSM).

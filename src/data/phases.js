@@ -12,7 +12,7 @@ export const PHASES = [
     id: 0,
     name: 'Countdown',
     detail: 'Pad 39A · Kennedy Space Center',
-    met: -10,
+    met: -3,
     distEarthKm: 0,
     distMoonKm: 384400,
     velocityMs: 0,

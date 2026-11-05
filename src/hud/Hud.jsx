@@ -2,31 +2,66 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { PHASES, MAX_PHASE } from '../data/phases.js'
 import './Hud.css'
 
-// Spools a displayed number toward its target with an ease-out, so phase
-// steps read as live instrument sweeps instead of value pops. Purely a
-// display concern — targets come straight from PHASES data.
-function useSpooledValue(target, duration = 2400) {
-  const [display, setDisplay] = useState(target)
-  const displayRef = useRef(target)
+// Interpolates the telemetry anchors of two phases. Distances go in log
+// space (log of 1 + km), like the scene's own distance compression, so the
+// readout shrinks at the same rate Earth/the Moon visibly grow.
+function lerp(a, b, t) {
+  return a + (b - a) * t
+}
+
+function logLerp(a, b, t) {
+  return Math.exp(lerp(Math.log1p(a), Math.log1p(b), t)) - 1
+}
+
+function telemetryAt(from, to, t) {
+  const a = PHASES[from] ?? to
+  return {
+    met: lerp(a.met, to.met, t),
+    velocityMs: lerp(a.velocityMs, to.velocityMs, t),
+    distEarthKm: logLerp(a.distEarthKm, to.distEarthKm, t),
+    distMoonKm: logLerp(a.distMoonKm, to.distMoonKm, t),
+  }
+}
+
+// Live telemetry, spooled on the scene's own clock: StagingChoreography
+// publishes flowStore.telemetry = { from, to, t } every frame, where t is
+// the current beat's progress through the motion the viewer is watching
+// (Earth/Moon distance, the burn). Reading it per animation frame keeps the
+// numbers in step with the picture — a fixed timer from the phase change
+// used to show "0 km from Earth" while Earth was still a distant dot.
+function useTelemetry(flowStore, phaseIndex) {
+  const read = () => {
+    const live = flowStore.telemetry
+    const to = PHASES[phaseIndex] ?? PHASES[0]
+    if (!live || live.to !== phaseIndex) return telemetryAt(phaseIndex, to, 1)
+    return telemetryAt(live.from, to, live.t)
+  }
+  const [values, setValues] = useState(read)
+  const readRef = useRef(read)
+  readRef.current = read
 
   useEffect(() => {
-    const from = displayRef.current
-    if (from === target) return undefined
-    const start = performance.now()
     let frameId
+    let last = null
     const tick = () => {
-      const t = Math.min((performance.now() - start) / duration, 1)
-      const eased = 1 - (1 - t) ** 3
-      const value = from + (target - from) * eased
-      displayRef.current = value
-      setDisplay(value)
-      if (t < 1) frameId = requestAnimationFrame(tick)
+      const next = readRef.current()
+      if (
+        !last ||
+        Math.round(next.met) !== Math.round(last.met) ||
+        Math.abs(next.velocityMs - last.velocityMs) > 0.05 ||
+        Math.abs(next.distEarthKm - last.distEarthKm) > 0.01 ||
+        Math.abs(next.distMoonKm - last.distMoonKm) > 0.01
+      ) {
+        last = next
+        setValues(next)
+      }
+      frameId = requestAnimationFrame(tick)
     }
     frameId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frameId)
-  }, [target, duration])
+  }, [flowStore])
 
-  return display
+  return values
 }
 
 // Ground Elapsed Time in NASA's 000:00:00 form (hours can pass 100 on an
@@ -89,10 +124,11 @@ function Hud({ flowStore, ready = false, onLaunch }) {
   const phase = PHASES[state.flow.phase] ?? PHASES[0]
 
   const inCountdown = state.flow.phase === 0 && !state.flow.autoplayComplete
-  const met = useSpooledValue(phase.met, 2800)
-  const velocityKmh = useSpooledValue(phase.velocityMs * 3.6)
-  const distEarth = useSpooledValue(phase.distEarthKm)
-  const distMoon = useSpooledValue(phase.distMoonKm)
+  const telemetry = useTelemetry(flowStore, state.flow.phase)
+  const met = telemetry.met
+  const velocityKmh = telemetry.velocityMs * 3.6
+  const distEarth = telemetry.distEarthKm
+  const distMoon = telemetry.distMoonKm
 
   const isTouch = useIsTouch()
   const hint = hintFor(state, ready)

@@ -10,7 +10,7 @@ export function createFlowState() {
       // False until the visitor presses Launch (SceneManager.launch()) — the
       // countdown does not run on page load.
       launched: false,
-      // False until the real T-10 countdown (LaunchSequence, started by
+      // False until the real T-3 countdown (LaunchSequence, started by
       // SceneManager.launch()) ticks down and flips it — see MissionAutoplay,
       // which then carries phases 1-13 the rest of the way by itself.
       autoplayComplete: false,
@@ -21,7 +21,7 @@ export function createFlowState() {
   }
 }
 
-const COUNTDOWN_START_SECONDS = 10
+const COUNTDOWN_START_SECONDS = 3
 
 // Once launched, ticks the phase-0 countdown down to 0 once per second, then flips
 // autoplayComplete — the signal that (per the skill) unlocks the space-bar
@@ -74,7 +74,7 @@ export class FlowStore {
     this._emit()
   }
 
-  // Restarts the phase-0 countdown from T-10 — used by an on-demand launch
+  // Restarts the phase-0 countdown from T-3 — used by an on-demand launch
   // sequence to (re)trigger a real countdown rather than relying on the
   // default autoplayComplete: true scaffolding.
   resetCountdown() {
