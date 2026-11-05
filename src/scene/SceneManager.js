@@ -132,7 +132,7 @@ export class SceneManager {
     this._labelContainer.style.display = 'none'
     container.appendChild(this._labelContainer)
 
-    this.spaceStepper = new SpaceStepper({ flowStore })
+    this.spaceStepper = new SpaceStepper({ flowStore, onLaunch: () => this.launch() })
     this.freeLook = new FreeLookControl({
       domElement: this.renderer.domElement,
       flowStore,

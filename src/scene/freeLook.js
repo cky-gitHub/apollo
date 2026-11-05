@@ -100,10 +100,10 @@ export class FreeLookControl {
     const dy = event.clientY - this._lastY
     this._lastX = event.clientX
     this._lastY = event.clientY
-    // Horizontal is negated so the scene follows the pointer (drag right
-    // turns the rocket right), matching the touch swipe and OrbitControls'
-    // drag-rotate; the un-negated version read as inverted left/right.
-    this.onOrbit(-dx * AZIMUTH_DRAG_SENSITIVITY, dy * POLAR_DRAG_SENSITIVITY)
+    // Both axes are negated so the scene follows the pointer (drag right
+    // turns the rocket right, drag up tilts it up), matching the touch swipe
+    // and OrbitControls' drag-rotate; un-negated, each axis read inverted.
+    this.onOrbit(-dx * AZIMUTH_DRAG_SENSITIVITY, -dy * POLAR_DRAG_SENSITIVITY)
   }
 
   _onPointerUp() {

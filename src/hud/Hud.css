@@ -120,112 +120,220 @@
   letter-spacing: 0.08em;
 }
 
-/* ---- bottom right: input hint ------------------------------------------ */
+/* ---- top center, under the clock: the one control ---------------------
+   Launch / Next stage / Resume flight, centred under the GET clock. A white
+   glow, not amber — amber is reserved for readouts. Space presses it (see
+   spaceStepper.js); the key chip inside says so on desktop. */
 
-.hud-hint {
+.hud-action {
   position: absolute;
-  bottom: 2.9rem;
-  right: 1.75rem;
+  top: calc(var(--site-nav-height, 1.6rem) + 1rem + 3.9rem);
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .hud-key {
-  padding: 0.22em 0.65em;
-  border: 1px solid var(--mc-hairline-strong);
+  padding: 0.2em 0.55em;
+  border: 1px solid rgba(255, 255, 255, 0.35);
   border-radius: 2px;
-  font-size: 0.68rem;
-  letter-spacing: 0.18em;
-  color: var(--mc-text-mid);
-  animation: hud-key-pulse 2.6s ease-in-out infinite;
+  font-family: var(--mc-font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  color: rgba(255, 255, 255, 0.75);
+  text-shadow: none;
 }
 
 .hud-hint-label {
   font-family: var(--mc-font-sans);
   font-weight: 300;
-  font-size: 0.74rem;
-  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   color: var(--mc-text-mid);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.75);
 }
 
-/* Tappable / clickable HUD control (Launch everywhere; Next and Resume on
-   touch screens). The HUD root is pointer-events: none so the canvas keeps
-   its gestures; buttons opt back in. */
+/* The HUD root is pointer-events: none so the canvas keeps its gestures;
+   the button opts back in. */
 .hud-button {
   pointer-events: auto;
-  min-height: 44px;
-  padding: 0 1.15rem;
-  border: 1px solid var(--mc-hairline-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-height: 42px;
+  padding: 0 1.1rem 0 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 2px;
-  background: var(--mc-panel-bg);
+  background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   font-family: var(--mc-font-sans);
   font-weight: 400;
-  font-size: 0.74rem;
-  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--mc-text);
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
+  box-shadow:
+    0 0 14px rgba(255, 255, 255, 0.18),
+    inset 0 0 10px rgba(255, 255, 255, 0.06);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   transition:
     border-color 0.25s ease,
-    color 0.25s ease;
+    box-shadow 0.25s ease,
+    background-color 0.25s ease;
 }
 
 .hud-button:focus-visible {
-  outline: 1px solid var(--mc-amber);
+  outline: 1px solid #fff;
   outline-offset: 3px;
 }
 
 @media (hover: hover) {
   .hud-button:hover {
-    border-color: var(--mc-amber-dim);
+    border-color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow:
+      0 0 22px rgba(255, 255, 255, 0.32),
+      inset 0 0 12px rgba(255, 255, 255, 0.1);
   }
 }
 
 .hud-button--launch {
-  min-width: 9rem;
-  border-color: var(--mc-amber-dim);
-  color: var(--mc-amber);
-  letter-spacing: 0.28em;
-  text-shadow: var(--mc-glow-sm);
+  min-width: 10rem;
+  justify-content: center;
+  letter-spacing: 0.3em;
   animation: hud-launch-pulse 2.6s ease-in-out infinite;
 }
 
 @keyframes hud-launch-pulse {
   0%,
   100% {
-    border-color: var(--mc-amber-dim);
-    box-shadow: none;
+    border-color: rgba(255, 255, 255, 0.55);
+    box-shadow:
+      0 0 14px rgba(255, 255, 255, 0.18),
+      inset 0 0 10px rgba(255, 255, 255, 0.06);
   }
   50% {
-    border-color: var(--mc-amber);
-    box-shadow: 0 0 14px rgba(255, 182, 72, 0.25);
+    border-color: #fff;
+    box-shadow:
+      0 0 28px rgba(255, 255, 255, 0.42),
+      inset 0 0 14px rgba(255, 255, 255, 0.12);
   }
 }
 
-.hud-touch-tip {
-  font-family: var(--mc-font-sans);
-  font-weight: 300;
-  font-size: 0.66rem;
-  letter-spacing: 0.06em;
-  color: var(--mc-text-dim);
-  text-align: center;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.75);
+/* Vehicle loading: a thin white ring turning slowly beside the label. */
+.hud-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 42px;
 }
 
-@keyframes hud-key-pulse {
+.hud-loading-ring {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-top-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
+  animation: hud-spin 1.1s linear infinite;
+}
+
+.hud-loading .hud-hint-label {
+  animation: hud-breathe 2.2s ease-in-out infinite;
+}
+
+@keyframes hud-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes hud-breathe {
   0%,
   100% {
-    border-color: var(--mc-hairline-strong);
-    color: var(--mc-text-mid);
+    opacity: 0.55;
   }
   50% {
-    border-color: var(--mc-amber-dim);
-    color: var(--mc-text);
+    opacity: 1;
+  }
+}
+
+/* ---- lower middle: how to look around (first seconds only) ------------- */
+
+.hud-guide {
+  position: absolute;
+  left: 50%;
+  bottom: 7.4rem;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  width: max-content;
+  max-width: calc(100vw - 3.5rem);
+  opacity: 1;
+  transition:
+    opacity 0.8s ease,
+    transform 0.8s ease;
+}
+
+.hud-guide--hidden {
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px);
+}
+
+.hud-guide li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--mc-font-sans);
+  font-weight: 300;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  color: var(--mc-text-mid);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.85);
+}
+
+.hud-guide-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: rgba(255, 255, 255, 0.8);
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.35));
+}
+
+/* The look-around arrows breathe outward, hinting at the motion. */
+.hud-guide-icon--look path {
+  transform-origin: 12px 12px;
+  animation: hud-guide-arrows 2.4s ease-in-out infinite;
+}
+
+@keyframes hud-guide-arrows {
+  0%,
+  100% {
+    transform: scale(0.88);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-button--launch,
+  .hud-loading-ring,
+  .hud-loading .hud-hint-label,
+  .hud-guide-icon--look path {
+    animation: none;
   }
 }
 
@@ -308,15 +416,24 @@
     font-size: 0.8rem;
   }
 
-  .hud-hint {
-    left: 1.75rem;
-    right: 1.75rem;
+  /* The clock moves into the left column here, so the control drops to
+     the lower middle, above the telemetry, as before. */
+  .hud-action {
+    top: auto;
     bottom: 8rem;
-    flex-direction: column;
-    justify-content: center;
   }
 
   .hud-button {
     min-width: 12rem;
+    justify-content: center;
+  }
+
+  .hud-guide {
+    bottom: 12rem;
+  }
+
+  .hud-guide li {
+    white-space: normal;
+    text-align: left;
   }
 }

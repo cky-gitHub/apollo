@@ -98,20 +98,21 @@ function useIsTouch() {
   )
 }
 
-// What the bottom-right control shows. `action` is set when it is something
-// to press (a button on touch, a button or key on desktop); `keys` is the
-// desktop keyboard shortcut for it, if any.
+// What the centre control under the clock shows. `action` is set when it is
+// something to press (always a button); `keys` is the desktop keyboard
+// shortcut for it, shown inside the button. `loading` swaps in the
+// vehicle-loading indicator.
 function hintFor(state, ready) {
   if (state.mode === 'inspect') {
     return { keys: 'ESC', action: 'resume', label: 'Resume flight' }
   }
   if (!state.flow.launched) {
     return ready
-      ? { keys: null, action: 'launch', label: 'Launch' }
-      : { keys: null, action: null, label: 'Preparing vehicle…' }
+      ? { keys: 'SPACE', action: 'launch', label: 'Launch' }
+      : { keys: null, action: null, label: 'Preparing vehicle', loading: true }
   }
   if (!state.flow.autoplayComplete) {
-    return { keys: null, action: null, label: 'Auto sequence running' }
+    return { keys: null, action: null, label: 'Countdown' }
   }
   if (state.flow.phase >= MAX_PHASE) {
     return { keys: null, action: null, label: 'Mission complete · Crew recovered' }
@@ -132,16 +133,15 @@ function Hud({ flowStore, ready = false, onLaunch }) {
 
   const isTouch = useIsTouch()
   const hint = hintFor(state, ready)
+  // The look-around / inspect guide: shown from page load until the climb
+  // is under way (phase 3), then it gets out of the way.
+  const showGuide = state.mode === 'flow' && state.flow.phase < 3
 
   const runAction = () => {
     if (hint.action === 'launch') onLaunch?.()
     else if (hint.action === 'resume') flowStore.setMode('flow')
     else if (hint.action === 'next') flowStore.setPhase(Math.min(MAX_PHASE, state.flow.phase + 1))
   }
-
-  // Launch is always a button. The other actions are a button on touch
-  // screens and a keyboard hint (SPACE / ESC) on desktop.
-  const asButton = hint.action === 'launch' || (isTouch && hint.action)
 
   return (
     <div className="hud-root">
@@ -185,25 +185,49 @@ function Hud({ flowStore, ready = false, onLaunch }) {
         </div>
       </dl>
 
-      <div className="hud-hint">
-        {asButton ? (
+      <div className="hud-action">
+        {hint.action ? (
           <button
             type="button"
             className={`hud-button${hint.action === 'launch' ? ' hud-button--launch' : ''}`}
             onClick={runAction}
           >
-            {hint.label}
+            <span>{hint.label}</span>
+            {!isTouch && hint.keys && <span className="hud-key">{hint.keys}</span>}
           </button>
-        ) : (
-          <>
-            {hint.keys && <span className="hud-key">{hint.keys}</span>}
+        ) : hint.loading ? (
+          <div className="hud-loading" role="status">
+            <span className="hud-loading-ring" aria-hidden="true" />
             <span className="hud-hint-label">{hint.label}</span>
-          </>
-        )}
-        {isTouch && state.mode === 'flow' && (
-          <span className="hud-touch-tip">Tap the rocket to inspect · Swipe to look around</span>
+          </div>
+        ) : (
+          <span className="hud-hint-label">{hint.label}</span>
         )}
       </div>
+
+      <ul className={`hud-guide${showGuide ? '' : ' hud-guide--hidden'}`} aria-hidden={!showGuide}>
+        <li>
+          <svg className="hud-guide-icon hud-guide-icon--look" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2.5 9.5 5h5zM12 21.5 9.5 19h5zM2.5 12 5 9.5v5zM21.5 12 19 9.5v5z" />
+            <circle cx="12" cy="12" r="2.2" />
+          </svg>
+          <span>
+            {isTouch
+              ? 'Swipe sideways to look around'
+              : 'Two-finger swipe on the trackpad, or hold Alt and drag with the mouse, to look around'}
+          </span>
+        </li>
+        <li>
+          <svg className="hud-guide-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 3v15.5l4.2-4 2.7 6.2 2.6-1.1-2.7-6.1H18.5z" />
+          </svg>
+          <span>
+            {isTouch
+              ? 'Tap the rocket to take it apart · tap anywhere else to resume the flight'
+              : 'Click the rocket to take it apart · click anywhere else to resume the flight'}
+          </span>
+        </li>
+      </ul>
 
       <div className="hud-track" aria-hidden="true">
         {PHASES.map((p, i) => (

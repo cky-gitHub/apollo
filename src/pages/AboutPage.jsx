@@ -7,7 +7,7 @@ function AboutPage() {
       <PageHeader
         eyebrow="About this project"
         title="Why build a Saturn V in a browser"
-        lede="A short note on the intent behind this site, and the person who made it — replace this copy with your own."
+        lede="What this site set out to do, how the flight on the landing page was built, and who built it."
       />
 
       <section className="container" style={{ padding: '3.5rem 0 5rem' }}>
