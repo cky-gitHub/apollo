@@ -22,8 +22,16 @@ import { StagingChoreography } from './sequences/StagingChoreography.js'
 import { MissionAutoplay } from './sequences/MissionAutoplay.js'
 
 // Exponential smoothing rate for the camera chasing its resolved pose. High
-// enough to feel locked-on, low enough that vehicle accelerations (staging
-// kicks, engine lights) visibly surge in frame before the camera catches up.
+// enough to feel locked-on, low enough that framing changes (dolly in/out,
+// focus walking up the stack) ease in rather than snap.
+//
+// The smoothing only applies to the camera's position RELATIVE to the
+// vehicle: on rocket-frame shots the camera is first carried rigidly with
+// the vehicle's (vibration-free) translation each frame, then eased toward
+// its pose. Smoothing the absolute position instead made the camera trail
+// the vehicle by velocity / lambda — at the TLI and reentry speeds that lag
+// was larger than the shot distance, so the rocket flew out of frame and
+// came back once the move ended.
 const CAMERA_FOLLOW_LAMBDA = 7
 const SHAKE_GAIN_LAMBDA = 4
 
@@ -71,6 +79,10 @@ export class SceneManager {
     this._poseFromTarget = new THREE.Vector3()
     this._poseToPos = new THREE.Vector3()
     this._poseToTarget = new THREE.Vector3()
+    // Vehicle anchor last frame, for the rigid carry in _updateCamera.
+    this._prevAnchor = new THREE.Vector3()
+    this._hasPrevAnchor = false
+    this._anchorDelta = new THREE.Vector3()
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true })
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -235,7 +247,7 @@ export class SceneManager {
       launchSequence: this.launchSequence,
     })
 
-    // The T-10 countdown -> ignition -> liftoff cinematic waits for the
+    // The T-3 countdown -> ignition -> liftoff cinematic waits for the
     // visitor: the HUD's Launch button calls launch(). MissionAutoplay takes
     // over automatically once liftoff settles.
   }
@@ -313,6 +325,7 @@ export class SceneManager {
     this._camPos.copy(this.camera.position)
     if (orbitTarget) this._camTarget.copy(orbitTarget)
     const toPose = getCameraPose(this.currentPhase)
+    this._hasPrevAnchor = false
     this._cameraTransition = {
       from: {
         position: this._camPos.toArray(),
@@ -333,10 +346,19 @@ export class SceneManager {
     const orbit = { azimuth: this._manualAzimuth, polar: this._manualPolar }
 
     let shakeAmp = (currentPose.shake ?? 0)
+    // How much of the vehicle's translation the camera carries rigidly this
+    // frame: all of it on rocket-frame shots, none on fixed pad shots, and
+    // blended across a transition between the two.
+    let carry = currentPose.frame === 'rocket' ? 1 : 0
     const transition = this._cameraTransition
     if (transition) {
       const t = Math.min((now - transition.start) / transition.duration, 1)
       const eased = easeInOutCubic(t)
+      carry = THREE.MathUtils.lerp(
+        transition.from.frame === 'rocket' ? 1 : 0,
+        transition.to.frame === 'rocket' ? 1 : 0,
+        eased,
+      )
       resolvePoseWorld(
         transition.from,
         this.rocket,
@@ -373,8 +395,18 @@ export class SceneManager {
       )
     }
 
-    // Smoothed chase: the camera trails its resolved pose slightly, so
-    // vehicle accelerations read as in-frame motion.
+    // Rigid carry with the vehicle (see CAMERA_FOLLOW_LAMBDA), then the
+    // smoothed ease toward the resolved pose.
+    const anchor = this.choreography?.vehiclePosition ?? this.rocket?.position
+    if (anchor) {
+      if (this._hasPrevAnchor && carry > 0) {
+        this._anchorDelta.subVectors(anchor, this._prevAnchor).multiplyScalar(carry)
+        this._camPos.add(this._anchorDelta)
+        this._camTarget.add(this._anchorDelta)
+      }
+      this._prevAnchor.copy(anchor)
+      this._hasPrevAnchor = true
+    }
     const k = 1 - Math.exp(-dt * CAMERA_FOLLOW_LAMBDA)
     this._camPos.lerp(this._poseToPos, k)
     this._camTarget.lerp(this._poseToTarget, k)

@@ -60,7 +60,10 @@ export const CAMERA_PHASES = [
     // sphere's grazing curvature (a camera at focus-1 ends up underground and
     // the Moon front-face culls away)
     { distance: 40, focusHeight: 90, duration: 3800 },
-    { distance: 50, focusHeight: 90, duration: 3200 }, // 11: lunar liftoff & rendezvous
+    // 11: lunar liftoff & rendezvous — focus sits between the ascent stage
+    // and the docking CSM above it (at 90, the LM's footpads, the docked
+    // Columbia was half out of the top of the frame)
+    { distance: 52, focusHeight: 97, duration: 3200 },
     { distance: 44, focusHeight: 99, duration: 3000 }, // 12: trans-Earth injection
     { distance: 57, focusHeight: 97, shake: 0.5, duration: 3400 }, // 13: reentry & splashdown
   ].map(({ distance, ...pose }) => ({
