@@ -6,7 +6,8 @@ const AZIMUTH_TOUCH_SENSITIVITY = 0.008 // rad per finger px, one-finger horizon
 
 // Look-around available at all times, in both flow and inspect mode: a
 // two-finger trackpad drag (reported by the browser as a non-ctrl wheel
-// event) or an Alt+left-mouse drag orbits the camera. In flow mode the
+// event), a plain left-mouse drag (flow mode) or an Alt+left-mouse drag
+// (either mode) orbits the camera. In flow mode the
 // deltas feed cameraPath.js's `orbit` param, layered on top of the scripted
 // pose (see SceneManager._updateCamera). In inspect mode, SceneManager
 // instead rotates the OrbitControls camera directly around its target,
@@ -56,6 +57,7 @@ export class FreeLookControl {
   _onStoreChange(state) {
     this._active = state.mode === 'flow' || state.mode === 'inspect'
     this._mode = state.mode
+    if (!this._dragging) this._setCursor(state.mode === 'flow' ? 'grab' : '')
     if (!this._active) this._dragging = false
     if (state.mode !== 'flow') this._touchDragging = false
   }
@@ -74,10 +76,19 @@ export class FreeLookControl {
       this._lastX = event.clientX
       return
     }
-    if (!this._active || !event.altKey || event.button !== 0) return
-    event.preventDefault()
-    event.stopImmediatePropagation() // don't let OrbitControls also start its own drag-rotate
+    if (!this._active || event.button !== 0) return
+    // Flow mode: a plain click-and-drag looks around. It must NOT swallow
+    // the event — inspection.js needs the same pointerdown to tell a click
+    // on the rocket (inspect) from a drag (look around, > 5 px of travel).
+    // Inspect mode: plain drag belongs to OrbitControls, so only Alt+drag
+    // is ours there, and OrbitControls must not also react to it.
+    if (this._mode === 'inspect') {
+      if (!event.altKey) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+    }
     this._dragging = true
+    this._setCursor('grabbing')
     this._lastX = event.clientX
     this._lastY = event.clientY
   }
@@ -107,8 +118,13 @@ export class FreeLookControl {
   }
 
   _onPointerUp() {
+    if (this._dragging) this._setCursor(this._mode === 'flow' ? 'grab' : '')
     this._dragging = false
     this._touchDragging = false
+  }
+
+  _setCursor(cursor) {
+    this.domElement.style.cursor = cursor
   }
 
   dispose() {

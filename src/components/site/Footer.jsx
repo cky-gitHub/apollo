@@ -14,7 +14,8 @@ function Footer() {
           </div>
 
           <nav className="site-footer-links" aria-label="Site">
-            <Link to="/program">The Program</Link>
+            <Link to="/">Simulation</Link>
+            <Link to="/program">The program</Link>
             <Link to="/apollo-11">Apollo 11</Link>
             <Link to="/missions">Missions</Link>
             <Link to="/about">About</Link>

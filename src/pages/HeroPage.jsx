@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { SceneManager } from '../scene/SceneManager'
 import { FlowStore } from '../scene/flowState.js'
 import Hud from '../hud/Hud.jsx'
@@ -6,9 +6,12 @@ import ScrollCue from '../components/site/ScrollCue.jsx'
 import HeroIntro from '../components/site/HeroIntro.jsx'
 import './HeroPage.css'
 
-function HeroPage() {
+// The flight itself: canvas, scene and HUD, owning one FlowStore. HeroPage
+// remounts it under a new key to start over ("Fly again" after splashdown),
+// which disposes the old SceneManager and builds a fresh one on the pad —
+// the same state as first landing on the Apollo home page, no page reload.
+function HeroStage({ spacerRef, onRestart }) {
   const canvasRootRef = useRef(null)
-  const spacerRef = useRef(null)
   const sceneManagerRef = useRef(null)
   const [flowStore] = useState(() => new FlowStore())
   const [sceneReady, setSceneReady] = useState(false)
@@ -45,19 +48,34 @@ function HeroPage() {
       observer.disconnect()
       sceneManager.dispose()
     }
-  }, [flowStore])
+  }, [flowStore, spacerRef])
+
+  return (
+    <div className="hero-fixed">
+      <div ref={canvasRootRef} className="hero-canvas-root" />
+      <Hud
+        flowStore={flowStore}
+        ready={sceneReady}
+        onLaunch={() => sceneManagerRef.current?.launch()}
+        onRestart={onRestart}
+      />
+      <ScrollCue />
+    </div>
+  )
+}
+
+function HeroPage() {
+  const spacerRef = useRef(null)
+  const [run, setRun] = useState(0)
+
+  const restart = useCallback(() => {
+    window.scrollTo({ top: 0 })
+    setRun((n) => n + 1)
+  }, [])
 
   return (
     <div className="hero-page">
-      <div className="hero-fixed">
-        <div ref={canvasRootRef} className="hero-canvas-root" />
-        <Hud
-          flowStore={flowStore}
-          ready={sceneReady}
-          onLaunch={() => sceneManagerRef.current?.launch()}
-        />
-        <ScrollCue />
-      </div>
+      <HeroStage key={run} spacerRef={spacerRef} onRestart={restart} />
       <div ref={spacerRef} className="hero-spacer" aria-hidden="true" />
       <HeroIntro />
     </div>

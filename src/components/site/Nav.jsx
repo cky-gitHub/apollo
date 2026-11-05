@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import './Nav.css'
 
+// The cky logo (top left) is the way back to ckyogeshwar.com; these are
+// Apollo's own pages. 'Simulation' is the flight on the Apollo home page.
 const LINKS = [
-  { to: '/program', label: 'The Program' },
+  { to: '/', label: 'Simulation', end: true },
+  { to: '/program', label: 'The program' },
   { to: '/apollo-11', label: 'Apollo 11' },
   { to: '/missions', label: 'Missions' },
   { to: '/about', label: 'About' },
@@ -43,16 +46,12 @@ function Nav({ isHero }) {
             <NavLink
               key={link.to}
               to={link.to}
+              end={link.end}
               className={({ isActive }) => `site-nav-link${isActive ? ' site-nav-link--active' : ''}`}
             >
               {link.label}
             </NavLink>
           ))}
-          {/* Back out to the main site this app is mounted in. A plain
-              anchor: the router's links stay inside /apollo. */}
-          <a href="/" className="site-nav-link site-nav-home">
-            ← cky
-          </a>
         </nav>
 
         <button
@@ -73,16 +72,12 @@ function Nav({ isHero }) {
             <NavLink
               key={link.to}
               to={link.to}
+              end={link.end}
               className={({ isActive }) => `site-nav-link${isActive ? ' site-nav-link--active' : ''}`}
             >
               {link.label}
             </NavLink>
           ))}
-          {/* Back out to the main site this app is mounted in. A plain
-              anchor: the router's links stay inside /apollo. */}
-          <a href="/" className="site-nav-link site-nav-home">
-            ← cky
-          </a>
         </nav>
       )}
     </header>

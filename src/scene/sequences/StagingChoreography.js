@@ -1273,7 +1273,10 @@ export class StagingChoreography {
         this._padMaterials.push(object.material)
       }
     })
-    this._padOpacity = 1
+    // The pad's materials are module-level in LaunchPad.js, shared by every
+    // build of it — a previous flight ("Fly again" remounts the scene) left
+    // them faded to 0, so the new pad would be invisible. Reset explicitly.
+    this._setPadOpacity(1)
 
     this._telemetryFrom = 0
     this._detached = new Set()
