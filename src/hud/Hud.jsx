@@ -156,7 +156,8 @@ function Hud({ flowStore, ready = false, onLaunch, onRestart }) {
   }, [missionOver, state.mode, onRestart])
   // The look-around / inspect guide: shown from page load until the climb
   // is under way (phase 3), then it gets out of the way.
-  const showGuide = state.mode === 'flow' && state.flow.phase < 3
+  // Desktop only: phones and tablets get no instructions.
+  const showGuide = !isTouch && state.mode === 'flow' && state.flow.phase < 3
 
   const runAction = () => {
     if (hint.action === 'launch') onLaunch?.()
@@ -227,29 +228,23 @@ function Hud({ flowStore, ready = false, onLaunch, onRestart }) {
         )}
       </div>
 
+      {!isTouch && (
       <ul className={`hud-guide${showGuide ? '' : ' hud-guide--hidden'}`} aria-hidden={!showGuide}>
         <li>
           <svg className="hud-guide-icon hud-guide-icon--look" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 2.5 9.5 5h5zM12 21.5 9.5 19h5zM2.5 12 5 9.5v5zM21.5 12 19 9.5v5z" />
             <circle cx="12" cy="12" r="2.2" />
           </svg>
-          <span>
-            {isTouch
-              ? 'Swipe sideways to look around'
-              : 'Click and drag, or swipe two fingers on the trackpad, to look around'}
-          </span>
+          <span>Click and drag, or swipe two fingers on the trackpad, to look around</span>
         </li>
         <li>
           <svg className="hud-guide-icon" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6 3v15.5l4.2-4 2.7 6.2 2.6-1.1-2.7-6.1H18.5z" />
           </svg>
-          <span>
-            {isTouch
-              ? 'Tap the rocket to take it apart · tap anywhere else to resume the flight'
-              : 'Click the rocket to take it apart · click anywhere else to resume the flight'}
-          </span>
+          <span>Click the rocket to take it apart · click anywhere else to resume the flight</span>
         </li>
       </ul>
+      )}
 
       <div className="hud-track" aria-hidden="true">
         {PHASES.map((p, i) => (

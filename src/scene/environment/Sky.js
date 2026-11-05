@@ -80,6 +80,12 @@ export class SkyEnvironment {
 
     this.stars = buildStarField()
     this.stars.name = 'star-field'
+    // Drawn FIRST in the transparent pass. The star sphere (r 3800 around the
+    // camera) is nearer than Earth/the Moon on most shots, and as the
+    // nearest transparent object it used to be drawn last, depth-testing in
+    // front of the bodies — stars showed through Earth. Drawn first and not
+    // writing depth, every body painted afterwards simply covers them.
+    this.stars.renderOrder = -2
     scene.add(this.stars)
   }
 
