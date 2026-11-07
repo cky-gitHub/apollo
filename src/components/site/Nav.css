@@ -52,9 +52,30 @@
   mask: url('/cky-logo.svg') center / contain no-repeat;
 }
 
+/* The name beside the mark, matching the main site's header: small spaced
+   capitals, dim until hovered. margin-right: auto keeps it beside the logo
+   and leaves the links on the right. */
+.site-nav-wordmark {
+  margin: 0 auto 0 24px;
+  font-family: var(--site-font-body);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--site-text-mid);
+  text-decoration: none;
+  transition: color 0.25s ease;
+}
+
 @media (hover: hover) {
   .site-nav-mark:hover {
     color: var(--site-accent-text);
+  }
+
+  .site-nav-wordmark:hover {
+    color: var(--site-text);
   }
 }
 
@@ -66,7 +87,8 @@
 
 /* Legibility over whatever the 3D scene happens to be showing (bright sky,
    Earth limb) before the nav has picked up its solid backing. */
-.site-nav:not(.site-nav--solid) .site-nav-link {
+.site-nav:not(.site-nav--solid) .site-nav-link,
+.site-nav:not(.site-nav--solid) .site-nav-wordmark {
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.75);
 }
 
@@ -147,6 +169,11 @@
 
   .site-nav-links {
     display: none;
+  }
+
+  .site-nav-wordmark {
+    margin-left: 16px;
+    font-size: 0.6875rem;
   }
 
   .site-nav-toggle {
