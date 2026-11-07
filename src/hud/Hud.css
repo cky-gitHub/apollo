@@ -392,6 +392,16 @@
     top: calc(var(--site-nav-height, 1.6rem) + 1rem + 7rem);
   }
 
+  /* In the left column the label runs across the launch tower's lattice;
+     the same dark drop the readout uses keeps it legible over it. */
+  .hud-clock .hud-label {
+    color: var(--mc-text-mid);
+    letter-spacing: 0.16em;
+    text-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.9),
+      0 0 10px rgba(0, 0, 0, 0.8);
+  }
+
   .hud-clock-value {
     font-size: 1.1rem;
   }

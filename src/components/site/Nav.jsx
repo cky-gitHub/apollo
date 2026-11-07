@@ -41,6 +41,12 @@ function Nav({ isHero }) {
           <span className="site-nav-logo" aria-hidden="true" />
         </a>
 
+        {/* The full name beside the mark, as on every ckyogeshwar.com page.
+            It goes home too; the logo is the keyboard stop, so this is not. */}
+        <a href="/" className="site-nav-wordmark" tabIndex={-1}>
+          Constantin K Yogeshwar
+        </a>
+
         <nav className="site-nav-links" aria-label="Primary">
           {LINKS.map((link) => (
             <NavLink
