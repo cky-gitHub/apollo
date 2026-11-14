@@ -30,6 +30,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Logo and name sit exactly where the main site's header puts them
+     (homepage components/CornerNav.module.css): desktop, a 48px mark at
+     24,24 with the name 30px to its right; phones (820px and down), a 32px
+     mark at 27.5,20 with the name 23.5px to its right. Pinned to the top
+     rather than centred in the bar, so the bar's height doesn't move it. */
+  align-self: flex-start;
+  padding-top: 24px;
 }
 
 /* The cky mark (public/cky-logo.svg, the same file the homepage uses). The
@@ -45,7 +52,7 @@
 
 .site-nav-logo {
   display: block;
-  height: 36px;
+  height: 48px;
   aspect-ratio: 410.464 / 775.227;
   background-color: currentColor;
   -webkit-mask: url('/cky-logo.svg') center / contain no-repeat;
@@ -56,15 +63,15 @@
    capitals, dim until hovered. margin-right: auto keeps it beside the logo
    and leaves the links on the right. */
 .site-nav-wordmark {
-  margin: 0 auto 0 24px;
+  margin: 0 auto 0 30px;
   font-family: var(--site-font-body);
-  font-size: 0.75rem;
+  font-size: 0.9375rem;
   font-weight: 400;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.22em;
   line-height: 1;
   text-transform: uppercase;
   white-space: nowrap;
-  color: var(--site-text-mid);
+  color: rgba(244, 242, 236, 0.72);
   text-decoration: none;
   transition: color 0.25s ease;
 }
@@ -162,19 +169,34 @@
    GET clock) need the full row, and there isn't room to also fit four
    nav links beside the wordmark without wrapping into them — collapse to
    a toggle + dropdown instead of shrinking text further. */
+/* Phones: the main site's phone header. */
+@media (max-width: 820px) {
+  .site-nav-inner {
+    padding-top: 20px;
+    padding-left: 27.5px;
+  }
+
+  .site-nav-logo {
+    height: 32px;
+  }
+
+  .site-nav-wordmark {
+    margin-left: 23.5px;
+    font-size: 0.6875rem;
+    letter-spacing: 0.18em;
+    color: var(--site-text-mid);
+  }
+}
+
 @media (max-width: 720px) {
   .site-nav-inner {
-    padding-inline: max(22px, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+    padding-right: max(22px, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
   }
 
   .site-nav-links {
     display: none;
   }
 
-  .site-nav-wordmark {
-    margin-left: 16px;
-    font-size: 0.6875rem;
-  }
 
   .site-nav-toggle {
     display: flex;
