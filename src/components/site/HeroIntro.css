@@ -14,7 +14,7 @@
 
 .hero-intro-heading {
   font-family: var(--site-font-display);
-  font-weight: 500;
+  font-weight: 300;
   font-size: clamp(2.1rem, 4.4vw, 3.4rem);
   line-height: 1.12;
   letter-spacing: -0.01em;
@@ -52,7 +52,7 @@
 .hero-intro-card h3 {
   margin: 0;
   font-family: var(--site-font-display);
-  font-weight: 500;
+  font-weight: 400;
   font-size: 1.3rem;
   color: var(--site-text);
 }

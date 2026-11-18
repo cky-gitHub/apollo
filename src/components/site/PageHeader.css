@@ -5,7 +5,7 @@
 
 .page-header-title {
   font-family: var(--site-font-display);
-  font-weight: 500;
+  font-weight: 300;
   font-size: clamp(2.4rem, 5.5vw, 4rem);
   line-height: 1.08;
   letter-spacing: -0.01em;

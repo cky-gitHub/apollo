@@ -4,9 +4,11 @@ import { BrowserRouter } from 'react-router-dom'
 // Self-hosted fonts (no Google Fonts CDN request — see src/styles/site-theme.css
 // for the reasoning; this also keeps EU visitor IPs off a third-party host,
 // relevant given the site's own GDPR privacy notice).
-import '@fontsource-variable/fraunces/standard.css'
-import '@fontsource-variable/fraunces/standard-italic.css'
-import '@fontsource-variable/inter/standard.css'
+import '@fontsource-variable/newsreader/wght.css'
+import '@fontsource-variable/newsreader/wght-italic.css'
+import '@fontsource/instrument-sans/400.css'
+import '@fontsource/instrument-sans/500.css'
+import '@fontsource/instrument-sans/600.css'
 import '@fontsource/jetbrains-mono/300.css'
 import '@fontsource/jetbrains-mono/400.css'
 import '@fontsource/jetbrains-mono/500.css'

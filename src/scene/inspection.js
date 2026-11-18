@@ -85,7 +85,7 @@ export class InspectionController {
       Object.assign(el.style, {
         position: 'absolute',
         color: '#ffffff',
-        fontFamily: 'var(--label-font, Inter, system-ui, sans-serif)',
+        fontFamily: "var(--label-font, 'Instrument Sans', system-ui, sans-serif)",
         fontWeight: '300',
         fontSize: 'clamp(13px, 3.6vw, 16px)',
         lineHeight: '1.25',

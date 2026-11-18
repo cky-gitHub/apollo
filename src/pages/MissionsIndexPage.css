@@ -53,7 +53,7 @@
 .mission-card-top h3 {
   margin: 0;
   font-family: var(--site-font-display);
-  font-weight: 500;
+  font-weight: 400;
   font-size: 1.2rem;
   color: var(--site-text);
 }
