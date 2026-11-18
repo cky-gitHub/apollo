@@ -33,7 +33,7 @@
 .crew-card-header h3 {
   margin: 0;
   font-family: var(--site-font-display);
-  font-weight: 500;
+  font-weight: 400;
   font-size: 1.25rem;
   color: var(--site-text);
 }
@@ -94,7 +94,7 @@
 .mission-timeline-body h3 {
   margin: 0 0 0.35rem;
   font-family: var(--site-font-display);
-  font-weight: 500;
+  font-weight: 400;
   font-size: 1.1rem;
   color: var(--site-text);
 }
